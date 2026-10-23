@@ -34,5 +34,5 @@ export function startServer(port = 8787, token = randomBytes(24).toString("hex")
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const s = startServer(Number(process.env.PORT ?? 8787));
-  console.log(`listening ws://127.0.0.1:${(s.wss.address() as any).port}\nTOKEN: ${s.token}`);
+  s.wss.once("listening", () => console.log(`listening ws://127.0.0.1:${(s.wss.address() as any).port}\nTOKEN: ${s.token}`));
 }
