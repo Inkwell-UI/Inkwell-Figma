@@ -25,7 +25,7 @@ const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
   "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent",
   "layoutMode", "itemSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
-  "fillGeometry", "characters", "fontName", "fontSize", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
+  "fillGeometry", "characters", "fontName", "fontSize", "textStyleId", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
 const jsonable = (v: unknown) => v !== undefined && typeof v !== "symbol" && typeof v !== "function";
 
@@ -91,9 +91,10 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       const content = n.characters ?? "";
       if (typeof n.fontName === "symbol" || typeof n.fontSize === "symbol") figma.mixedStyle = true; // 0.1: one run only
       const font = typeof n.fontName === "object" ? `${n.fontName.family}/${n.fontName.style}` : "mixed";
+      const styleName = ctx.styleNameOf?.(n);
       return done({
         type, content, sizing: SIZING[n.textAutoResize ?? "NONE"] ?? "fixed", ...textLayout(n),
-        runs: [{ start: 0, end: content.length, font: { kind: "alias", name: font }, size: typeof n.fontSize === "number" ? n.fontSize : 0, ...(fills[0] && { fill: fills[0] }) }],
+        runs: [{ start: 0, end: content.length, font: { kind: "alias", name: font, ...(styleName && { styleName }) }, size: typeof n.fontSize === "number" ? n.fontSize : 0, ...(fills[0] && { fill: fills[0] }) }],
       });
     }
     case "image": {

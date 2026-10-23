@@ -10,6 +10,7 @@ export interface FigPaint {
   imageHash?: string | null;
   scaleMode?: string;
 }
+export interface FigParent { id: string; type: string; parent?: FigParent | null }
 export interface FigNode {
   id: string;
   name: string;
@@ -23,7 +24,7 @@ export interface FigNode {
   y?: number;
   width?: number;
   height?: number;
-  parent?: { id: string; type: string } | null;
+  parent?: FigParent | null;
   children?: readonly FigNode[];
   constraints?: { horizontal: string; vertical: string };
   fills?: readonly FigPaint[] | Mixed;
@@ -42,6 +43,7 @@ export interface FigNode {
   characters?: string;
   fontName?: { family: string; style: string } | Mixed;
   fontSize?: number | Mixed;
+  textStyleId?: string | Mixed;
   textAutoResize?: string;
   textTruncation?: string;
   textAlignHorizontal?: string;
@@ -57,4 +59,6 @@ export interface Ctx {
   id(n: { id: string }): string;
   /** Resolved main component id of an instance (async in dynamic-page mode, so prefetched). */
   componentOf(n: FigNode): string | undefined;
+  /** Name of the text style a text node uses (async in Figma, so prefetched by the main thread). */
+  styleNameOf?(n: FigNode): string | undefined;
 }

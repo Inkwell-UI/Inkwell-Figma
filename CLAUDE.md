@@ -20,6 +20,7 @@ TypeScript, Figma Plugin API. Patch, IR and protocol types come from `@inkwell-u
 
 - **The plugin only reports visuals.** It never stores or edits behavior; that lives in the editor's overlay.
 - **IR and patch formats come from inkwell-spec.** Never define them here.
+- **One SWF per top-level FRAME.** Patches, hash trees and resends carry `swfId`; loose top-level layers are never synced, only reported in the `swfs` message.
 - **Send only changed subtrees,** debounced (about 100–200 ms). On reconnect, send a hash tree and resend only mismatched nodes.
 - **Node IDs are the link to behavior.** Write the mapping back with `setSharedPluginData`. Handle duplicate/paste (new IDs), detached instances (re-link by name and path) and deleted nodes (orphans, never silently dropped).
 - **Network access only from the UI iframe,** to `localhost`, with the session token. No other network calls. The manifest's `devAllowedDomains` must use `ws://localhost:<port>`: Figma rejects an IP address there. Plugin iframes send `Origin: null`, so the token is the real defence; the port is fixed in the spike and needs negotiation in the editor.

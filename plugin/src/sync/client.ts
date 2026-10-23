@@ -21,7 +21,7 @@ export interface ClientOpts {
   /** Ask the main thread for its hash tree; it answers via client.hashTree(). */
   requestHashTree(): void;
   /** Editor asked for fresh subtrees; main thread answers via client.send(patch). */
-  onResend(ids: string[]): void;
+  onResend(swfId: string, ids: string[]): void;
   onChange(s: { state: State; badge?: Badge; error?: string }): void;
 }
 
@@ -33,6 +33,7 @@ export class SyncClient {
   private failures = 0;
   private timer: unknown;
   private stopped = true;
+  private badges = new Map<string, Badge>();
   constructor(private o: ClientOpts) {}
 
   start() { this.stopped = false; this.port = 0; this.connect(); }
@@ -75,11 +76,18 @@ export class SyncClient {
         return;
       }
       this.failures = 0;
+      this.badges.clear();
       this.set("ready", { badge: "compiling" });
       this.o.requestHashTree();
-    } else if (m.type === "status") this.o.onChange({ state: this.state, badge: m.state, error: m.issues?.[0]?.message });
+    } else if (m.type === "status") {
+      // per-SWF states roll up: error beats compiling beats synced
+      this.badges.set(m.swfId ?? "", m.state);
+      const all = [...this.badges.values()];
+      const badge = all.includes("error") ? "error" : all.includes("compiling") ? "compiling" : "synced";
+      this.o.onChange({ state: this.state, badge, error: m.issues?.[0]?.message });
+    }
     else if (m.type === "error") this.o.onChange({ state: this.state, badge: "error", error: m.message });
-    else if (m.type === "resend") this.o.onResend(m.ids);
+    else if (m.type === "resend") this.o.onResend(m.swfId, m.ids);
   }
 
   private lost() {

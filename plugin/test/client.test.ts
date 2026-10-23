@@ -22,7 +22,7 @@ function setup() {
     open: (url) => { const s = new FakeSocket(url); socks.push(s); return s; },
     timers: { set: (f, ms) => setTimeout(f, ms), clear: (h) => clearTimeout(h as any) },
     requestHashTree: () => log.hashReq++,
-    onResend: (ids) => log.resend.push(ids),
+    onResend: (swfId, ids) => log.resend.push([swfId, ...ids]),
     onChange: (s) => log.states.push(s),
   });
   return { client, socks, log };
@@ -41,8 +41,8 @@ describe("SyncClient", () => {
     socks[0].recv(ack);
     expect(client.state).toBe("ready");
     expect(log.hashReq).toBe(1);
-    client.send({ type: "hashTree", nodeHashes: { a: "1" } });
-    expect(socks[0].sent[1]).toEqual({ type: "hashTree", nodeHashes: { a: "1" } });
+    client.send({ type: "hashTree", swfId: "f", nodeHashes: { a: "1" } });
+    expect(socks[0].sent[1]).toEqual({ type: "hashTree", swfId: "f", nodeHashes: { a: "1" } });
   });
 
   it("explains a failed sweep (wrong token or editor not running) instead of flickering silently", () => {
@@ -89,8 +89,12 @@ describe("SyncClient", () => {
     socks[0].onopen!(); socks[0].recv(ack);
     socks[0].recv({ type: "status", state: "synced" });
     expect(log.states.at(-1)).toMatchObject({ state: "ready", badge: "synced" });
-    socks[0].recv({ type: "resend", ids: ["x", "y"] });
-    expect(log.resend).toEqual([["x", "y"]]);
+    socks[0].recv({ type: "resend", swfId: "f", ids: ["x", "y"] });
+    expect(log.resend).toEqual([["f", "x", "y"]]);
+    // per-swf status rolls up: one swf in error keeps the badge on error
+    socks[0].recv({ type: "status", swfId: "a", state: "error" });
+    socks[0].recv({ type: "status", swfId: "b", state: "synced" });
+    expect(log.states.at(-1)).toMatchObject({ badge: "error" });
     socks[0].recv({ type: "error", code: "c", message: "boom" });
     expect(log.states.at(-1)).toMatchObject({ badge: "error", error: "boom" });
     socks[0].recv("garbage"); // ignored

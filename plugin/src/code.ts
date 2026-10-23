@@ -11,8 +11,9 @@ const store: MappingStore = {
   set: (n, ir) => (n as unknown as BaseNode).setSharedPluginData(NS, "id", ir),
 };
 const components = new Map<string, string>(); // instance id -> main component id (async API, prefetched)
+const styleNames = new Map<string, string>(); // text node id -> text style name (async API, prefetched)
 const idMap = new IdMap(store);
-const syncer = new Syncer(idMap, (n) => components.get(n.id));
+const syncer = new Syncer(idMap, (n) => components.get(n.id), (n) => styleNames.get(n.id));
 
 const live = async (id: string): Promise<FigNode | null> => {
   const n = await figma.getNodeByIdAsync(id);
@@ -20,9 +21,21 @@ const live = async (id: string): Promise<FigNode | null> => {
 };
 async function prefetch(n: any): Promise<void> {
   if (n.type === "INSTANCE") { const m = await n.getMainComponentAsync(); if (m) components.set(n.id, m.id); }
+  if (n.type === "TEXT" && typeof n.textStyleId === "string" && n.textStyleId) {
+    const st = await figma.getStyleByIdAsync(n.textStyleId);
+    if (st) styleNames.set(n.id, st.name); else styleNames.delete(n.id);
+  } else if (n.type === "TEXT") styleNames.delete(n.id);
   for (const c of n.children ?? []) await prefetch(c);
 }
 const post = (m: object) => figma.ui.postMessage(m);
+const postPatches = (ps: object[]) => { for (const p of ps) post({ kind: "patch", ...p }); };
+// Tell the editor which top-level frames exist and which loose layers belong to none; only when it changed.
+let lastSwfs = "";
+const postSwfs = (force = false) => {
+  const s = syncer.swfs(figma.currentPage.children as unknown as FigNode[]);
+  const j = JSON.stringify(s);
+  if (force || j !== lastSwfs) { lastSwfs = j; post({ kind: "swfs", ...s }); }
+};
 
 // Serialize runs so patches keep their order.
 let queue: Promise<unknown> = Promise.resolve();
@@ -30,8 +43,8 @@ const enqueue = (fn: () => Promise<void>) => { queue = queue.then(fn).catch((e) 
 
 const changes = collector(150, (ids) => enqueue(async () => {
   for (const id of ids) { const n = await live(id); if (n) await prefetch(n); }
-  const p = await syncer.flush(ids, live);
-  if (p) post({ kind: "patch", ...p });
+  postPatches(await syncer.flush(ids, live));
+  postSwfs();
 }));
 
 // Per-page `nodechange` (not `documentchange`): with documentAccess "dynamic-page" documentchange needs every
@@ -42,8 +55,8 @@ page.on("nodechange", onNodeChange);
 
 async function scan(emit: boolean) {
   await prefetch(figma.currentPage);
-  const p = await syncer.scan(figma.currentPage.children as unknown as FigNode[]);
-  if (emit && p) post({ kind: "patch", ...p });
+  const ps = await syncer.scan(figma.currentPage.children as unknown as FigNode[]);
+  if (emit) { postPatches(ps); postSwfs(); }
 }
 figma.on("currentpagechange", () => enqueue(async () => {
   page.off("nodechange", onNodeChange);
@@ -55,10 +68,13 @@ figma.on("currentpagechange", () => enqueue(async () => {
 figma.on("selectionchange", () => post({ kind: "selection", ids: figma.currentPage.selection.map((n) => idMap.id(n)) }));
 
 figma.showUI(__html__, { width: 300, height: 190 });
-figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[] }) => {
+figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string }) => {
   if (m.kind === "ready") enqueue(async () => post({ kind: "init", token: (await figma.clientStorage.getAsync("token")) ?? "", fileKey: figma.fileKey }));
   else if (m.kind === "saveToken") void figma.clientStorage.setAsync("token", m.value);
-  else if (m.kind === "requestHashTree") enqueue(async () => post({ kind: "hashTree", nodeHashes: syncer.hashTree() }));
-  else if (m.kind === "resend") enqueue(async () => { const p = await syncer.resend(m.ids ?? [], live); if (p) post({ kind: "patch", ...p }); });
+  else if (m.kind === "requestHashTree") enqueue(async () => {
+    postSwfs(true);
+    for (const [swfId, nodeHashes] of Object.entries(syncer.hashTrees())) post({ kind: "hashTree", swfId, nodeHashes });
+  });
+  else if (m.kind === "resend") enqueue(async () => { const p = await syncer.resend(m.swfId ?? "", m.ids ?? [], live); if (p) postPatches([p]); });
 };
 enqueue(() => scan(false)); // baseline only; the editor gets the state through the hash tree on connect

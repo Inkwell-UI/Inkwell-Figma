@@ -17,7 +17,7 @@ function connect() {
     open: (url) => new WebSocket(url) as unknown as Socket,
     timers: { set: (f, ms) => setTimeout(f, ms), clear: (h) => clearTimeout(h as number) },
     requestHashTree: () => toMain({ kind: "requestHashTree" }),
-    onResend: (ids) => toMain({ kind: "resend", ids }),
+    onResend: (swfId, ids) => toMain({ kind: "resend", swfId, ids }),
     onChange: ({ state, badge, error }) => {
       const s = state === "ready" ? (badge ?? "connected") : state;
       $("status").textContent = error ? `${s}: ${error}` : s;
@@ -32,9 +32,10 @@ onmessage = (e) => {
   const m = e.data.pluginMessage;
   if (!m) return;
   if (m.kind === "init") { $("token").value = m.token; fileKey = m.fileKey || undefined; }
-  else if (m.kind === "patch") client?.send({ type: "patch", seq: m.seq, patch: m.patch, ...(m.issues && { issues: m.issues }) });
+  else if (m.kind === "patch") client?.send({ type: "patch", seq: m.seq, swfId: m.swfId, ...(m.swf && { swf: m.swf }), patch: m.patch, ...(m.issues && { issues: m.issues }) });
   else if (m.kind === "selection") client?.send({ type: "selection", ids: m.ids });
-  else if (m.kind === "hashTree") client?.send({ type: "hashTree", nodeHashes: m.nodeHashes });
+  else if (m.kind === "hashTree") client?.send({ type: "hashTree", swfId: m.swfId, nodeHashes: m.nodeHashes });
+  else if (m.kind === "swfs") client?.send({ type: "swfs", frames: m.frames, loose: m.loose });
   else if (m.kind === "error") $("status").textContent = `plugin error: ${m.message}`;
 };
 toMain({ kind: "ready" });
