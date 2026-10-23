@@ -4,11 +4,17 @@ Figma plugin that streams design changes to the Inkwell editor as IR patches ove
 
 ## Commands
 
-Spike code lives in `spikes/figma-bridge/` and uses yarn: `yarn install`, `yarn test` (server self-test), `yarn build` (plugin), `yarn server` (prints the session token). List real commands here once the plugin is scaffolded.
+Use yarn at the repo root (needs `../Inkwell-Spec` built; see README).
+
+- `yarn test`: Vitest (serializer, sync, protocol client)
+- `yarn typecheck`: `tsc --noEmit`
+- `yarn build`: esbuild -> `plugin/dist/code.js` + `ui.html`
+
+Spike code lives in `spikes/figma-bridge/` with its own yarn project (`yarn server`, `yarn test`); leave it untouched.
 
 ## Stack
 
-TypeScript, Figma Plugin API. Patch and IR types come from `inkwell-spec`.
+TypeScript, Figma Plugin API. Patch, IR and protocol types come from `@inkwell-ui/spec`. Source in `plugin/src/` (`serialize/` pure, `sync/` pure, `code.ts` main thread, `ui.ts` iframe).
 
 ## Rules that are easy to break
 
