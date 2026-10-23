@@ -1,0 +1,21 @@
+<style>body{font:12px sans-serif;margin:8px}input,button{width:100%;margin:2px 0}pre{height:70px;overflow:auto;background:#eee}</style>
+<input id="token" placeholder="session token">
+<button id="go">Connect</button>
+<div id="status">disconnected</div>
+<pre id="log"></pre>
+<script>
+const PLUGIN_VERSION = "0.0.1", SPEC_VERSION = "TODO";
+let ws, last = [];
+const $ = (id) => document.getElementById(id);
+const log = (s) => { $("log").textContent += s + "\n"; $("status").textContent = s; };
+function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
+$("go").onclick = () => {
+  if (ws) ws.close();
+  ws = new WebSocket("ws://127.0.0.1:8787/?token=" + encodeURIComponent($("token").value.trim()));
+  ws.onopen = () => { log("open"); send({ type: "hello", pluginVersion: PLUGIN_VERSION, specVersion: SPEC_VERSION }); send({ type: "selection", nodes: last }); };
+  ws.onmessage = (e) => log("server: " + e.data);
+  ws.onclose = (e) => log("closed " + e.code);
+  ws.onerror = () => log("error (bad token/origin, server down, or blocked by manifest)");
+};
+onmessage = (e) => { const m = e.data.pluginMessage; if (m && m.type === "selection") { last = m.nodes; send(m); } };
+</script>
