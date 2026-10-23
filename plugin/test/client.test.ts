@@ -45,6 +45,16 @@ describe("SyncClient", () => {
     expect(socks[0].sent[1]).toEqual({ type: "hashTree", nodeHashes: { a: "1" } });
   });
 
+  it("explains a failed sweep (wrong token or editor not running) instead of flickering silently", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onclose!(); // port 8787 refused
+    socks[1].onclose!(); // port 8788 refused: the sweep is over
+    const last = log.states[log.states.length - 1];
+    expect(last.state).toBe("disconnected");
+    expect(last.error).toMatch(/Cannot reach the editor/);
+  });
+
   it("shows the editor's mismatch error and does not reconnect", () => {
     const { client, socks, log } = setup();
     client.start();

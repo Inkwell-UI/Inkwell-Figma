@@ -91,6 +91,8 @@ export class SyncClient {
     // try the next port at once; after a full sweep back off (0.5s doubling, max 8s)
     if (this.port + 1 < this.o.ports.length) { this.port++; this.connect(); return; }
     this.port = 0;
+    // a whole sweep failed: a browser WebSocket cannot read the 401, so say what the likely causes are
+    if (!wasReady) this.set("disconnected", { error: "Cannot reach the editor. Is it running, and is the token current? Retrying." });
     const delay = Math.min(500 * 2 ** this.failures++, 8000);
     this.timer = this.o.timers.set(() => this.connect(), delay);
   }
