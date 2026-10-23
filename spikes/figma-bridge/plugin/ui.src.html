@@ -11,7 +11,7 @@ const log = (s) => { $("log").textContent += s + "\n"; $("status").textContent =
 function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
 $("go").onclick = () => {
   if (ws) ws.close();
-  ws = new WebSocket("ws://127.0.0.1:8787/?token=" + encodeURIComponent($("token").value.trim()));
+  ws = new WebSocket("ws://localhost:8787/?token=" + encodeURIComponent($("token").value.trim()));
   ws.onopen = () => { log("open"); send({ type: "hello", pluginVersion: PLUGIN_VERSION, specVersion: SPEC_VERSION }); send({ type: "selection", nodes: last }); };
   ws.onmessage = (e) => log("server: " + e.data);
   ws.onclose = (e) => log("closed " + e.code);
