@@ -2,7 +2,7 @@
 
 **Question:** can a Figma plugin (UI iframe) connect to a local WebSocket using a session token and send a `hello` plus a selection change?
 
-**Result: PARTIAL.** Server side (token, origin check, loopback bind, hello/selection handling) is verified by `npm test`. The Figma desktop leg is **UNVERIFIED** until a human runs it (steps below).
+**Result: PARTIAL.** Server side (token, origin check, loopback bind, hello/selection handling) is verified by `yarn test`. The Figma desktop leg is **UNVERIFIED** until a human runs it (steps below).
 
 ## What was built
 - `server.ts`: `ws` server on `127.0.0.1:8787` only. Random 48-hex session token printed at start; required as `?token=`. Origin must be `null` (Figma iframe) or absent (non-browser); any other origin gets 403, bad token 401. Logs every message, acks `hello`.
@@ -11,14 +11,14 @@
 
 ## Run
 ```
-npm install
-npm test              # self-test, exit 0 on success
-npm run build         # esbuild -> plugin/dist/code.js + ui.html
-npm run server        # prints TOKEN
+yarn install
+yarn test              # self-test, exit 0 on success
+yarn build         # esbuild -> plugin/dist/code.js + ui.html
+yarn server        # prints TOKEN
 ```
 
 ## Human test script (Figma desktop)
-1. `npm install && npm run build`, then `npm run server`; copy the TOKEN.
+1. `yarn install && yarn build`, then `yarn server`; copy the TOKEN.
 2. Figma desktop: open any design file > Plugins > Development > Import plugin from manifest... > pick `plugin/manifest.json`.
 3. Run Plugins > Development > Inkwell Bridge Spike. Paste the token, click Connect.
 4. Expect UI status `open` then `server: {"type":"helloAck","ok":true}`, and server log `[recv] {"type":"hello",...}`.
