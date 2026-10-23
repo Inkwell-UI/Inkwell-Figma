@@ -14,6 +14,16 @@ describe("serialize", () => {
     expect(n).toMatchObject({ type: "frame", clipContent: true, parent: "p", children: ["k"], anchor: { h: "stretch", v: "bottom" },
       autoLayout: { mode: "vertical", spacing: 4, padding: [1, 2, 3, 4] }, transform: { x: 1, y: 2, width: 30, height: 40, rotation: 0 } });
   });
+  it("group: children are relative to the group (Figma gives frame-relative coordinates), the group's rotation is dropped", () => {
+    const group = { id: "g", name: "G", type: "GROUP", x: 100, y: 50, rotation: 30 } as const;
+    const g = ser({ ...group, children: [{ id: "r", name: "R", type: "RECTANGLE" }] });
+    expect(g).toMatchObject({ type: "frame", transform: { x: 100, y: 50, rotation: 0 } });
+    expect(ser({ id: "r", name: "R", type: "RECTANGLE", x: 120, y: 70, parent: group }).transform).toMatchObject({ x: 20, y: 20 });
+    // a group inside a group: both are relative to the same ancestor frame, so each subtracts its own parent
+    const inner = { id: "g2", name: "G2", type: "GROUP", x: 110, y: 60, parent: group } as const;
+    expect(ser({ ...inner, rotation: 0 }).transform).toMatchObject({ x: 10, y: 10 });
+    expect(ser({ id: "r2", name: "R2", type: "RECTANGLE", x: 115, y: 65, parent: inner }).transform).toMatchObject({ x: 5, y: 5 });
+  });
   it("page parent becomes null", () => expect(ser({ id: "f", name: "F", type: "FRAME", parent: { id: "0:1", type: "PAGE" } }).parent).toBeNull());
   it("shape keeps cubics; fills and strokes with alignment", () => {
     const n = ser({ id: "v", name: "V", type: "VECTOR", vectorPaths: [{ data: "M 0 0 C 1 2 3 4 5 6 L 7 8 Z" }],

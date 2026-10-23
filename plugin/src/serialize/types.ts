@@ -10,7 +10,7 @@ export interface FigPaint {
   imageHash?: string | null;
   scaleMode?: string;
 }
-export interface FigParent { id: string; type: string; parent?: FigParent | null }
+export interface FigParent { id: string; type: string; x?: number; y?: number; parent?: FigParent | null }
 export interface FigNode {
   id: string;
   name: string;

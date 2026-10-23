@@ -73,10 +73,16 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
   if (Object.keys(unknown).length) figma.unknown = unknown;
 
   const parentId = n.parent && n.parent.type !== "PAGE" && n.parent.type !== "DOCUMENT" ? ctx.id(n.parent) : null;
+  // Figma gives the children of a GROUP coordinates relative to the group's containing frame, not to the group, but a group becomes
+  // a frame here, so make the child relative to it. The group's own rotation is dropped for the same reason: its children's
+  // coordinates and rotations already include it, and the group's x/y/width/height are its axis-aligned bounding box.
+  const inGroup = n.parent?.type === "GROUP";
+  const gx = inGroup ? n.parent?.x ?? 0 : 0;
+  const gy = inGroup ? n.parent?.y ?? 0 : 0;
   const base = {
     id: ctx.id(n), name: n.name, parent: parentId,
     children: (n.children ?? []).map((c) => ctx.id(c)),
-    transform: { x: n.x ?? 0, y: n.y ?? 0, width: n.width ?? 0, height: n.height ?? 0, rotation: n.rotation ?? 0 },
+    transform: { x: (n.x ?? 0) - gx, y: (n.y ?? 0) - gy, width: n.width ?? 0, height: n.height ?? 0, rotation: n.type === "GROUP" ? 0 : n.rotation ?? 0 },
     anchor: { h: H[n.constraints?.horizontal ?? "MIN"] ?? "left", v: V[n.constraints?.vertical ?? "MIN"] ?? "top" },
     visible: n.visible ?? true,
     opacity: n.opacity ?? 1,
