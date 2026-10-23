@@ -36,6 +36,13 @@ describe("serialize", () => {
     const n = ser({ id: "t", name: "T", type: "TEXT", characters: "$HELLO", fontName: { family: "Inter", style: "Bold" }, fontSize: 12, textAutoResize: "WIDTH_AND_HEIGHT", fills: [solid] });
     expect(n).toMatchObject({ type: "text", content: "$HELLO", sizing: "autoWidth", runs: [{ start: 0, end: 6, font: { kind: "alias", name: "Inter/Bold" }, size: 12 }] });
   });
+  it("text layout maps to real fields; sizing mode is not textFit", () => {
+    const base = { id: "t", name: "T", type: "TEXT", characters: "a", fontName: { family: "I", style: "R" }, fontSize: 10 } as const;
+    const n: any = ser({ ...base, textAlignHorizontal: "JUSTIFIED", textAlignVertical: "BOTTOM", lineHeight: { unit: "PERCENT", value: 120 }, letterSpacing: { unit: "PIXELS", value: 2 }, textAutoResize: "HEIGHT", textTruncation: "ENDING" });
+    expect(n).toMatchObject({ align: "justify", verticalAlign: "bottom", lineHeight: { unit: "percent", value: 120 }, letterSpacing: { unit: "px", value: 2 }, textFit: "none", truncate: true, sizing: "autoHeight" });
+    expect(n.extra?.text).toBeUndefined();
+    expect(ser({ ...base, lineHeight: { unit: "AUTO" } })).toMatchObject({ align: "left", verticalAlign: "top", lineHeight: { unit: "auto" }, letterSpacing: { unit: "px", value: 0 }, truncate: false });
+  });
   it("mixed text style is flagged, not dropped", () => {
     const n = ser({ id: "t", name: "T", type: "TEXT", characters: "ab", fontName: Symbol("mixed"), fontSize: Symbol("mixed") });
     expect(n.extra.figma.mixedStyle).toBe(true);

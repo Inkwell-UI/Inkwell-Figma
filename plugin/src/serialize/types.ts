@@ -43,6 +43,11 @@ export interface FigNode {
   fontName?: { family: string; style: string } | Mixed;
   fontSize?: number | Mixed;
   textAutoResize?: string;
+  textTruncation?: string;
+  textAlignHorizontal?: string;
+  textAlignVertical?: string;
+  lineHeight?: { unit: string; value?: number } | Mixed;
+  letterSpacing?: { unit: string; value: number } | Mixed;
   componentProperties?: Readonly<Record<string, { type: string; value: unknown }>>;
 }
 

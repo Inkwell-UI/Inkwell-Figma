@@ -6,6 +6,9 @@ const H: Record<string, string> = { MIN: "left", MAX: "right", CENTER: "center",
 const V: Record<string, string> = { MIN: "top", MAX: "bottom", CENTER: "center", STRETCH: "stretch", SCALE: "scale" };
 const SHAPES = new Set(["RECTANGLE", "ELLIPSE", "VECTOR", "LINE", "STAR", "POLYGON", "BOOLEAN_OPERATION"]);
 const SIZING: Record<string, string> = { NONE: "fixed", TRUNCATE: "fixed", WIDTH_AND_HEIGHT: "autoWidth", HEIGHT: "autoHeight" };
+const TEXT_H: Record<string, string> = { LEFT: "left", CENTER: "center", RIGHT: "right", JUSTIFIED: "justify" };
+const TEXT_V: Record<string, string> = { TOP: "top", CENTER: "center", BOTTOM: "bottom" };
+const UNIT: Record<string, "px" | "percent"> = { PIXELS: "px", PERCENT: "percent" };
 const PLAIN = ["FRAME", "RECTANGLE", "ELLIPSE", "VECTOR", "TEXT", "INSTANCE", "COMPONENT"];
 
 // Known Figma properties with no IR field yet: kept verbatim under extra.figma, never dropped.
@@ -14,7 +17,7 @@ const PASSTHROUGH = [
   "strokeCap", "strokeJoin", "strokeMiterLimit", "dashPattern", "layoutSizingHorizontal", "layoutSizingVertical",
   "layoutPositioning", "layoutGrow", "layoutAlign", "primaryAxisAlignItems", "counterAxisAlignItems",
   "primaryAxisSizingMode", "counterAxisSizingMode", "layoutWrap", "counterAxisSpacing", "maskType",
-  "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "textCase", "textDecoration",
+  "textCase", "textDecoration",
 ];
 // Properties the serializer reads or that are structural. Any other own-enumerable key also goes to extra
 // (plain objects only: real Figma nodes expose properties on the prototype, so PASSTHROUGH is the real net).
@@ -22,7 +25,7 @@ const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
   "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent",
   "layoutMode", "itemSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
-  "fillGeometry", "characters", "fontName", "fontSize", "textAutoResize", "componentProperties", ...PASSTHROUGH,
+  "fillGeometry", "characters", "fontName", "fontSize", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
 const jsonable = (v: unknown) => v !== undefined && typeof v !== "symbol" && typeof v !== "function";
 
@@ -32,6 +35,27 @@ function irType(n: FigNode, fills: { type: string }[], hasStroke: boolean): Node
   if (n.type === "COMPONENT" || n.type === "COMPONENT_SET") return "component";
   if (SHAPES.has(n.type)) return n.type === "RECTANGLE" && fills.length === 1 && fills[0].type === "image" && !hasStroke ? "image" : "shape";
   return "frame"; // FRAME, GROUP, SECTION and unknown containers
+}
+
+/**
+ * Figma text layout -> IR fields. Approximations:
+ * - textAutoResize (NONE / HEIGHT / WIDTH_AND_HEIGHT) is a box *sizing mode* -> `sizing`, never textFit.
+ * - Figma has no shrink-to-fit, so textFit is always "none" (authors set it in the editor overlay/later spec work).
+ * - textTruncation ENDING (or the deprecated textAutoResize TRUNCATE) -> truncate true.
+ * - lineHeight AUTO -> auto; unknown units (or a mixed value) fall back to auto. Same for letterSpacing -> 0 px.
+ */
+function textLayout(n: FigNode) {
+  const lh = n.lineHeight, ls = n.letterSpacing;
+  const lhUnit = typeof lh === "object" ? UNIT[lh.unit] : undefined;
+  const lsUnit = typeof ls === "object" ? UNIT[ls.unit] : undefined;
+  return {
+    align: TEXT_H[n.textAlignHorizontal ?? ""] ?? "left",
+    verticalAlign: TEXT_V[n.textAlignVertical ?? ""] ?? "top",
+    lineHeight: lhUnit && typeof lh === "object" && "value" in lh ? { unit: lhUnit, value: lh.value } : { unit: "auto" },
+    letterSpacing: lsUnit && typeof ls === "object" ? { unit: lsUnit, value: ls.value } : { unit: "px", value: 0 },
+    textFit: "none",
+    truncate: n.textTruncation === "ENDING" || n.textAutoResize === "TRUNCATE",
+  };
 }
 
 /** One node, shallow: children are ids only. */
@@ -68,7 +92,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       if (typeof n.fontName === "symbol" || typeof n.fontSize === "symbol") figma.mixedStyle = true; // 0.1: one run only
       const font = typeof n.fontName === "object" ? `${n.fontName.family}/${n.fontName.style}` : "mixed";
       return done({
-        type, content, sizing: SIZING[n.textAutoResize ?? "NONE"] ?? "fixed",
+        type, content, sizing: SIZING[n.textAutoResize ?? "NONE"] ?? "fixed", ...textLayout(n),
         runs: [{ start: 0, end: content.length, font: { kind: "alias", name: font }, size: typeof n.fontSize === "number" ? n.fontSize : 0, ...(fills[0] && { fill: fills[0] }) }],
       });
     }
