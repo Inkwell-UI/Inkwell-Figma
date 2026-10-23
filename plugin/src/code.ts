@@ -68,7 +68,7 @@ figma.on("currentpagechange", () => enqueue(async () => {
 figma.on("selectionchange", () => post({ kind: "selection", ids: figma.currentPage.selection.map((n) => idMap.id(n)) }));
 
 figma.showUI(__html__, { width: 300, height: 190 });
-figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string }) => {
+figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[] }) => {
   if (m.kind === "ready") enqueue(async () => post({ kind: "init", token: (await figma.clientStorage.getAsync("token")) ?? "", fileKey: figma.fileKey }));
   else if (m.kind === "saveToken") void figma.clientStorage.setAsync("token", m.value);
   else if (m.kind === "requestHashTree") enqueue(async () => {
@@ -76,5 +76,15 @@ figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?:
     for (const [swfId, nodeHashes] of Object.entries(syncer.hashTrees())) post({ kind: "hashTree", swfId, nodeHashes });
   });
   else if (m.kind === "resend") enqueue(async () => { const p = await syncer.resend(m.swfId ?? "", m.ids ?? [], live); if (p) postPatches([p]); });
+  // Image bytes by hash, only for hashes the editor asked for (it caches them on disk, so this runs once per image).
+  else if (m.kind === "needAssets") void (async () => {
+    for (const hash of m.hashes ?? []) {
+      try {
+        const bytes = await figma.getImageByHash(hash)?.getBytesAsync();
+        if (bytes) post({ kind: "asset", hash, bytes });
+        else post({ kind: "error", message: `image ${hash} is not in this file` });
+      } catch (e) { post({ kind: "error", message: `image ${hash}: ${e}` }); }
+    }
+  })();
 };
 enqueue(() => scan(false)); // baseline only; the editor gets the state through the hash tree on connect

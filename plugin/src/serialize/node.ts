@@ -104,8 +104,8 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       });
     }
     case "image": {
-      const f = fills[0] as { asset: string; scaleMode?: string };
-      return done({ type, asset: f.asset, scaleMode: f.scaleMode ?? "fill" });
+      const f = fills[0] as { asset: string; scaleMode?: string; opacity?: number };
+      return done({ type, asset: f.asset, scaleMode: f.scaleMode ?? "fill", ...(f.opacity !== undefined && { fillOpacity: f.opacity }) });
     }
     case "instance": {
       const props = Object.entries(n.componentProperties ?? {});
@@ -127,7 +127,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       const mode = n.layoutMode === "HORIZONTAL" ? "horizontal" : n.layoutMode === "VERTICAL" ? "vertical" : null;
       if (n.layoutMode && !mode && n.layoutMode !== "NONE") figma.layoutMode = n.layoutMode; // e.g. GRID
       return done({
-        type: "frame", clipContent: n.clipsContent ?? false,
+        type: "frame", clipContent: n.clipsContent ?? false, ...(fills.length && { fills }),
         ...(mode && { autoLayout: { mode, spacing: n.itemSpacing ?? 0, padding: [n.paddingTop ?? 0, n.paddingRight ?? 0, n.paddingBottom ?? 0, n.paddingLeft ?? 0] } }),
       });
     }

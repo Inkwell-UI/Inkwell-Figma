@@ -22,6 +22,8 @@ export interface ClientOpts {
   requestHashTree(): void;
   /** Editor asked for fresh subtrees; main thread answers via client.send(patch). */
   onResend(swfId: string, ids: string[]): void;
+  /** Editor lacks these images (only hashes not yet asked for on this connection); main thread answers via client.send(asset). */
+  onNeedAssets?(hashes: string[]): void;
   onChange(s: { state: State; badge?: Badge; error?: string }): void;
 }
 
@@ -34,6 +36,7 @@ export class SyncClient {
   private timer: unknown;
   private stopped = true;
   private badges = new Map<string, Badge>();
+  private asked = new Set<string>(); // image hashes already requested on this connection: each is sent at most once
   constructor(private o: ClientOpts) {}
 
   start() { this.stopped = false; this.port = 0; this.connect(); }
@@ -77,6 +80,7 @@ export class SyncClient {
       }
       this.failures = 0;
       this.badges.clear();
+      this.asked.clear();
       this.set("ready", { badge: "compiling" });
       this.o.requestHashTree();
     } else if (m.type === "status") {
@@ -88,6 +92,11 @@ export class SyncClient {
     }
     else if (m.type === "error") this.o.onChange({ state: this.state, badge: "error", error: m.message });
     else if (m.type === "resend") this.o.onResend(m.swfId, m.ids);
+    else if (m.type === "needAssets") {
+      const fresh = [...new Set(m.hashes)].filter((h) => !this.asked.has(h));
+      for (const h of fresh) this.asked.add(h);
+      if (fresh.length) this.o.onNeedAssets?.(fresh);
+    }
   }
 
   private lost() {

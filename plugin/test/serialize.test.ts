@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Node } from "@inkwell-ui/spec";
-import { serializeNode, serializeTree, parsePath, type FigNode } from "../src/serialize/index.js";
+import { serializeNode, serializeTree, parsePath, toFill, type FigNode } from "../src/serialize/index.js";
 
 const ctx = { id: (n: { id: string }) => n.id, componentOf: (n: FigNode) => (n.id === "i1" ? "c1" : undefined) };
 const base = { visible: true, opacity: 1, x: 1, y: 2, width: 30, height: 40, rotation: 0, parent: { id: "p", type: "FRAME" } };
@@ -42,6 +42,22 @@ describe("serialize", () => {
   });
   it("lone image-filled rectangle is an image node", () =>
     expect(ser({ id: "m", name: "M", type: "RECTANGLE", fills: [{ type: "IMAGE", imageHash: "h1", scaleMode: "FILL" }] })).toMatchObject({ type: "image", asset: "h1", scaleMode: "fill" }));
+  it("image paint opacity: fillOpacity on an image node, opacity on an image fill; hidden image paints are dropped", () => {
+    const img = { type: "IMAGE", imageHash: "h1", scaleMode: "FIT", opacity: 0.5 };
+    expect(ser({ id: "m", name: "M", type: "RECTANGLE", opacity: 0.8, fills: [img] })).toMatchObject({ type: "image", scaleMode: "fit", fillOpacity: 0.5, opacity: 0.8 });
+    expect(ser({ id: "m", name: "M", type: "RECTANGLE", fills: [{ ...img, opacity: 1 }] })).not.toHaveProperty("fillOpacity");
+    expect(toFill(img as any)).toEqual({ type: "image", asset: "h1", scaleMode: "fit", opacity: 0.5 });
+    expect(toFill({ ...img, visible: false } as any)).toBeNull();
+    expect(toFill({ type: "IMAGE", imageHash: null } as any)).toBeNull();
+  });
+  it("frame keeps its fills (image background), a frame without fills has none", () => {
+    const f = ser({ id: "f", name: "F", type: "FRAME", fills: [{ type: "IMAGE", imageHash: "h2", scaleMode: "CROP" }] });
+    expect(f).toMatchObject({ type: "frame", fills: [{ type: "image", asset: "h2", scaleMode: "crop" }] });
+    expect(ser({ id: "f", name: "F", type: "FRAME", fills: [] })).not.toHaveProperty("fills");
+    expect(ser({ id: "g", name: "G", type: "GROUP" })).not.toHaveProperty("fills");
+  });
+  it("an image rectangle with a stroke stays a shape with an image fill", () =>
+    expect(ser({ id: "m", name: "M", type: "RECTANGLE", fills: [{ type: "IMAGE", imageHash: "h1" }], strokes: [solid], strokeWeight: 1 })).toMatchObject({ type: "shape", fills: [{ type: "image" }] }));
   it("text: one run, font reference, sizing, $KEY content", () => {
     const n = ser({ id: "t", name: "T", type: "TEXT", characters: "$HELLO", fontName: { family: "Inter", style: "Bold" }, fontSize: 12, textAutoResize: "WIDTH_AND_HEIGHT", fills: [solid] });
     expect(n).toMatchObject({ type: "text", content: "$HELLO", sizing: "autoWidth", runs: [{ start: 0, end: 6, font: { kind: "alias", name: "Inter/Bold" }, size: 12 }] });

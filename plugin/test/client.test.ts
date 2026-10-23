@@ -16,13 +16,14 @@ class FakeSocket implements Socket {
 function setup() {
   vi.useFakeTimers();
   const socks: FakeSocket[] = [];
-  const log = { hashReq: 0, resend: [] as string[][], states: [] as any[] };
+  const log = { hashReq: 0, resend: [] as string[][], states: [] as any[], need: [] as string[][] };
   const client = new SyncClient({
     ports: [8787, 8788], token: "t k", pluginVersion: "0.1.0", fileKey: "FK",
     open: (url) => { const s = new FakeSocket(url); socks.push(s); return s; },
     timers: { set: (f, ms) => setTimeout(f, ms), clear: (h) => clearTimeout(h as any) },
     requestHashTree: () => log.hashReq++,
     onResend: (swfId, ids) => log.resend.push([swfId, ...ids]),
+    onNeedAssets: (h) => log.need.push(h),
     onChange: (s) => log.states.push(s),
   });
   return { client, socks, log };
@@ -105,5 +106,33 @@ describe("SyncClient", () => {
     expect(s.url).toContain(":8787/");
     s.onopen!(); s.recv(ack);
     expect(log.hashReq).toBe(2);
+  });
+});
+
+describe("SyncClient assets (protocol 3)", () => {
+  const A = "a".repeat(40), B = "b".repeat(40);
+  it("asks the main thread once per hash per connection, and again after a reconnect", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onopen!(); socks[0].recv(ack);
+    socks[0].recv({ type: "needAssets", hashes: [A, A] });
+    socks[0].recv({ type: "needAssets", hashes: [A, B] });
+    socks[0].recv({ type: "needAssets", hashes: [B] });
+    expect(log.need).toEqual([[A], [B]]);
+    client.send({ type: "asset", hash: A, data: "AAAA" });
+    expect(socks[0].sent.at(-1)).toEqual({ type: "asset", hash: A, data: "AAAA" });
+    socks[0].onclose!();
+    vi.runOnlyPendingTimers();
+    const s = socks.at(-1)!;
+    s.onopen!(); s.recv(ack);
+    s.recv({ type: "needAssets", hashes: [A] });
+    expect(log.need).toEqual([[A], [B], [A]]);
+  });
+  it("ignores a needAssets with a malformed hash (never reaches the main thread)", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onopen!(); socks[0].recv(ack);
+    socks[0].recv({ type: "needAssets", hashes: ["../x"] });
+    expect(log.need).toEqual([]);
   });
 });

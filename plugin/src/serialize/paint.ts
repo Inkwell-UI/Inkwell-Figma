@@ -18,7 +18,11 @@ export function toFill(p: FigPaint): Fill | null {
     case "SOLID": return p.color ? { type: "solid", color: color(p.color), ...(p.opacity !== undefined && p.opacity !== 1 && { opacity: p.opacity }) } : null;
     case "GRADIENT_LINEAR": return { type: "linear", stops: stops(), ...transform() };
     case "GRADIENT_RADIAL": return { type: "radial", stops: stops(), ...transform() };
-    case "IMAGE": return p.imageHash ? { type: "image", asset: p.imageHash, ...(p.scaleMode && { scaleMode: SCALE[p.scaleMode] ?? p.scaleMode.toLowerCase() }) } : null;
+    case "IMAGE": return p.imageHash ? {
+      type: "image", asset: p.imageHash,
+      ...(p.scaleMode && { scaleMode: SCALE[p.scaleMode] ?? p.scaleMode.toLowerCase() }),
+      ...(p.opacity !== undefined && p.opacity !== 1 && { opacity: p.opacity }),
+    } : null;
     default: return null;
   }
 }
