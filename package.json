@@ -1,0 +1,20 @@
+{
+  "name": "inkwell-figma-plugin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node plugin/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@inkwell-ui/spec": "file:../Inkwell-Spec"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "*",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
