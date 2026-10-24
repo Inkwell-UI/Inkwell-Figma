@@ -1,12 +1,12 @@
 # Inkwell Figma plugin
 
-Streams Figma design changes to the Inkwell editor as IR patches over a local WebSocket. Design: `Inkwell Design Spec.md`, section "Figma integration and live sync". Formats come from `@inkwell-ui/spec` (sibling checkout `../Inkwell-Spec`, on branch `feat/protocol` or later; it becomes a published, pinned dependency later).
+Streams Figma design changes to the Inkwell editor as IR patches over a local WebSocket. Design: `Inkwell Design Spec.md`, section "Figma integration and live sync". Formats come from `@inkwell-ui/spec` (linked as `link:../Inkwell-Spec`, a sibling checkout that must exist next to this repo; it becomes a published, pinned dependency later).
 
 ## Build
 
 ```
 (cd ../Inkwell-Spec && yarn install && yarn build)
-yarn install        # re-run `yarn install --force` after rebuilding the spec: yarn copies file: deps
+yarn install        # the spec is linked, not copied: after changing it only `yarn build` in Inkwell-Spec is needed
 yarn test && yarn typecheck && yarn build
 ```
 

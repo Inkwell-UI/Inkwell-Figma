@@ -267,10 +267,9 @@
   resolved "https://registry.yarnpkg.com/@figma/plugin-typings/-/plugin-typings-1.142.0.tgz#985177066e9aeb4e64e9c3632d552ea7630c023a"
   integrity sha512-Loa9P4bUZi/pQejic8OYQSU4Zz9izJdIiDUkkKddq5Bfc5JPRV6pCeg3C8owovbX9lKshaFym86PlMhKZgLeBw==
 
-"@inkwell-ui/spec@file:../Inkwell-Spec":
+"@inkwell-ui/spec@link:../Inkwell-Spec":
   version "0.0.0"
-  dependencies:
-    zod "^4.6.7"
+  uid ""
 
 "@jridgewell/sourcemap-codec@^1.5.5":
   version "1.6.0"

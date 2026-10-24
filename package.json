@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@inkwell-ui/spec": "file:../Inkwell-Spec"
+    "@inkwell-ui/spec": "link:../Inkwell-Spec"
   },
   "devDependencies": {
     "@figma/plugin-typings": "*",
