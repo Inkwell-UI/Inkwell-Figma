@@ -8,12 +8,15 @@ export interface Socket {
   onmessage: ((e: { data: string }) => void) | null;
   onclose: (() => void) | null;
 }
-export type State = "disconnected" | "connecting" | "handshaking" | "ready" | "refused";
+export type State = "disconnected" | "connecting" | "handshaking" | "pending" | "denied" | "ready" | "refused";
 export type Badge = "synced" | "compiling" | "error";
 
 export interface ClientOpts {
   ports: readonly number[];
-  token: string;
+  /** Random 256-bit credential (64 hex), made once and kept in figma.clientStorage; the editor stores only its SHA-256 once the user allowed it. */
+  pluginSecret: string;
+  /** The Figma file's name, shown in the editor's approval prompt. */
+  fileName: string;
   pluginVersion: string;
   fileKey?: string;
   open(url: string): Socket;
@@ -27,7 +30,20 @@ export interface ClientOpts {
   onChange(s: { state: State; badge?: Badge; error?: string }): void;
 }
 
-/** Plugin-side protocol: port scan, hello/helloAck, backoff reconnect, hash tree on (re)connect. */
+/** Delay before asking again after the editor said `busy` (it prompts at most once a minute) or `timeout` (the user did not answer). */
+export const busyDelay = (failures: number) => Math.min(5000 * 2 ** failures, 60000);
+
+/** What the plugin window shows for a state (the editor's `error` text is appended when there is one). */
+export function statusText(s: { state: State; badge?: Badge; error?: string }): string {
+  const base = {
+    disconnected: "Disconnected", connecting: "Connecting...", handshaking: "Connecting...",
+    pending: "Waiting for approval in the editor", denied: "Denied", refused: "Refused",
+    ready: s.badge ?? "Connected",
+  }[s.state];
+  return s.error ? `${base}: ${s.error}` : base;
+}
+
+/** Plugin-side protocol: port scan, hello/helloAck (approved by the user in the editor on first use), backoff reconnect, hash tree on (re)connect. */
 export class SyncClient {
   state: State = "disconnected";
   private sock: Socket | null = null;
@@ -35,6 +51,7 @@ export class SyncClient {
   private failures = 0;
   private timer: unknown;
   private stopped = true;
+  private holdOff = 0; // set when the editor said busy/timeout: the next connect waits this long on the same port
   private badges = new Map<string, Badge>();
   private asked = new Set<string>(); // image hashes already requested on this connection: each is sent at most once
   constructor(private o: ClientOpts) {}
@@ -53,7 +70,7 @@ export class SyncClient {
   }
 
   private connect() {
-    const url = `ws://localhost:${this.o.ports[this.port]}/?token=${encodeURIComponent(this.o.token)}`;
+    const url = `ws://localhost:${this.o.ports[this.port]}/`;
     const s = this.o.open(url);
     this.sock = s;
     this.set("connecting");
@@ -61,6 +78,7 @@ export class SyncClient {
       this.set("handshaking");
       s.send(JSON.stringify({
         type: "hello", pluginVersion: this.o.pluginVersion, protocolVersion: PROTOCOL_VERSION, specVersion: SPEC_VERSION,
+        pluginSecret: this.o.pluginSecret, fileName: this.o.fileName,
         ...(this.o.fileKey && { fileKey: this.o.fileKey }),
       }));
     };
@@ -71,7 +89,17 @@ export class SyncClient {
   private onMessage(s: Socket, raw: string) {
     let m: EditorMessage;
     try { m = EditorMessage.parse(JSON.parse(raw)); } catch { return; } // malformed or unknown: ignore
-    if (m.type === "helloAck") {
+    if (m.type === "pending") this.set("pending"); // the user is being asked; the editor accepts nothing from us until helloAck
+    else if (m.type === "denied") {
+      if (m.reason === "busy" || m.reason === "timeout") {
+        this.holdOff = m.reason === "timeout" ? 60000 : busyDelay(this.failures++);
+        this.set("denied", { error: m.reason === "busy" ? "The editor is busy with another request; trying again shortly" : "No answer in the editor; asking again in a minute" });
+      } else {
+        this.stopped = true; // the user said no: do not pester (run the plugin again to ask again)
+        this.set("denied", { error: `${m.reason === "denied" ? "you denied this plugin in the editor" : m.reason}. Run the plugin again to ask again` });
+      }
+      s.close();
+    } else if (m.type === "helloAck") {
       if (!m.ok) {
         this.stopped = true; // retrying cannot fix a version mismatch
         s.close();
@@ -102,14 +130,20 @@ export class SyncClient {
   private lost() {
     this.sock = null;
     if (this.stopped) return;
+    if (this.holdOff) { // keep the "denied (busy / timeout)" state shown while waiting
+      const ms = this.holdOff;
+      this.holdOff = 0;
+      this.timer = this.o.timers.set(() => this.connect(), ms);
+      return;
+    }
     const wasReady = this.state === "ready";
     this.set("disconnected");
     if (wasReady) this.port = this.o.ports.length - 1; // re-sweep from the first port after a back-off
     // try the next port at once; after a full sweep back off (0.5s doubling, max 8s)
     if (this.port + 1 < this.o.ports.length) { this.port++; this.connect(); return; }
     this.port = 0;
-    // a whole sweep failed: a browser WebSocket cannot read the 401, so say what the likely causes are
-    if (!wasReady) this.set("disconnected", { error: "Cannot reach the editor. Is it running, and is the token current? Retrying." });
+    // a whole sweep failed: a browser WebSocket cannot say why
+    if (!wasReady) this.set("disconnected", { error: "Cannot reach the editor. Is it running? Retrying." });
     const delay = Math.min(500 * 2 ** this.failures++, 8000);
     this.timer = this.o.timers.set(() => this.connect(), delay);
   }

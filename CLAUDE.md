@@ -6,7 +6,7 @@ Figma plugin that streams design changes to the Inkwell editor as IR patches ove
 
 Use yarn at the repo root (needs `../Inkwell-Spec` built; see README).
 
-- `yarn test`: Vitest (serializer, sync, protocol client)
+- `yarn test`: Vitest (serializer, sync, protocol client incl. approval states)
 - `yarn typecheck`: `tsc --noEmit`
 - `yarn build`: esbuild -> `plugin/dist/code.js` + `ui.html`
 
@@ -23,7 +23,7 @@ TypeScript, Figma Plugin API. Patch, IR and protocol types come from `@inkwell-u
 - **One SWF per top-level FRAME.** Patches, hash trees and resends carry `swfId`; loose top-level layers are never synced, only reported in the `swfs` message.
 - **Send only changed subtrees,** debounced (about 100–200 ms). On reconnect, send a hash tree and resend only mismatched nodes.
 - **Node IDs are the link to behavior.** Write the mapping back with `setSharedPluginData`. Handle duplicate/paste (new IDs), detached instances (re-link by name and path) and deleted nodes (orphans, never silently dropped).
-- **Network access only from the UI iframe,** to `localhost`, with the session token. No other network calls. The manifest's `devAllowedDomains` must use `ws://localhost:<port>`: Figma rejects an IP address there. Plugin iframes send `Origin: null`, so the token is the real defence; the port is fixed in the spike and needs negotiation in the editor.
+- **Network access only from the UI iframe,** to `localhost`. No other network calls. The manifest's `devAllowedDomains` must use `ws://localhost:<port>`: Figma rejects an IP address there. Plugin iframes send `Origin: null`, which any sandboxed page can also send, so the defence is approve-on-connect (protocol 4): the plugin makes a random 256-bit secret once (`crypto.getRandomValues`, 64 hex, `sync/secret.ts`), keeps it in `figma.clientStorage` (`pluginSecret`), and sends it in every `hello` with `fileName` (`figma.root.name`). The editor asks the user to allow an unknown secret (answers `pending`, then `helloAck` or `denied {reason}`); send nothing before `helloAck`. There is no token and no paste field; the UI connects by itself and shows Connecting / Waiting for approval in the editor / Denied (reason) / Connected. `denied` by the user is not retried (the "Ask again" button does); `busy` and `timeout` retry with backoff. Never log or display the secret.
 - **Cache images by hash** (`getImageByHash`); never resend unchanged images.
 - **Flag unmapped fonts at sync time.**
 - **Distribution:** from GitHub only, imported from its manifest in the Figma desktop app. The editor bundles this plugin and checks its version in the handshake; bump the protocol version in inkwell-spec when the handshake changes.

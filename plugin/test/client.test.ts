@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION, SPEC_VERSION } from "@inkwell-ui/spec";
-import { SyncClient, type Socket } from "../src/sync/client.js";
+import { statusText, SyncClient, type Socket } from "../src/sync/client.js";
+import { isSecret, newSecret } from "../src/sync/secret.js";
+
+const SECRET = "ab".repeat(32);
 
 class FakeSocket implements Socket {
   sent: any[] = [];
@@ -18,7 +21,7 @@ function setup() {
   const socks: FakeSocket[] = [];
   const log = { hashReq: 0, resend: [] as string[][], states: [] as any[], need: [] as string[][] };
   const client = new SyncClient({
-    ports: [8787, 8788], token: "t k", pluginVersion: "0.1.0", fileKey: "FK",
+    ports: [8787, 8788], pluginSecret: SECRET, fileName: "My HUD", pluginVersion: "0.1.0", fileKey: "FK",
     open: (url) => { const s = new FakeSocket(url); socks.push(s); return s; },
     timers: { set: (f, ms) => setTimeout(f, ms), clear: (h) => clearTimeout(h as any) },
     requestHashTree: () => log.hashReq++,
@@ -31,12 +34,12 @@ function setup() {
 const ack = { type: "helloAck", ok: true, editorVersion: "1", protocolVersion: PROTOCOL_VERSION };
 
 describe("SyncClient", () => {
-  it("sends hello with versions and the encoded token, becomes ready on ack, asks for the hash tree", () => {
+  it("sends hello with versions, secret and file name (no token in the URL), becomes ready on ack, asks for the hash tree", () => {
     const { client, socks, log } = setup();
     client.start();
-    expect(socks[0].url).toBe("ws://localhost:8787/?token=t%20k");
+    expect(socks[0].url).toBe("ws://localhost:8787/");
     socks[0].onopen!();
-    expect(socks[0].sent[0]).toEqual({ type: "hello", pluginVersion: "0.1.0", protocolVersion: PROTOCOL_VERSION, specVersion: SPEC_VERSION, fileKey: "FK" });
+    expect(socks[0].sent[0]).toEqual({ type: "hello", pluginVersion: "0.1.0", protocolVersion: PROTOCOL_VERSION, specVersion: SPEC_VERSION, pluginSecret: SECRET, fileName: "My HUD", fileKey: "FK" });
     client.send({ type: "selection", ids: ["a"] }); // not ready yet: dropped
     expect(socks[0].sent).toHaveLength(1);
     socks[0].recv(ack);
@@ -46,7 +49,7 @@ describe("SyncClient", () => {
     expect(socks[0].sent[1]).toEqual({ type: "hashTree", swfId: "f", nodeHashes: { a: "1" } });
   });
 
-  it("explains a failed sweep (wrong token or editor not running) instead of flickering silently", () => {
+  it("explains a failed sweep (editor not running) instead of flickering silently", () => {
     const { client, socks, log } = setup();
     client.start();
     socks[0].onclose!(); // port 8787 refused
@@ -106,6 +109,67 @@ describe("SyncClient", () => {
     expect(s.url).toContain(":8787/");
     s.onopen!(); s.recv(ack);
     expect(log.hashReq).toBe(2);
+  });
+});
+
+describe("SyncClient approval (protocol 4)", () => {
+  it("pending shows 'Waiting for approval', sends nothing more, and helloAck makes it ready", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onopen!();
+    socks[0].recv({ type: "pending" });
+    expect(client.state).toBe("pending");
+    expect(statusText(log.states.at(-1))).toBe("Waiting for approval in the editor");
+    client.send({ type: "selection", ids: ["a"] }); // not approved yet: dropped
+    expect(socks[0].sent).toHaveLength(1);
+    socks[0].recv(ack);
+    expect(client.state).toBe("ready");
+    expect(log.hashReq).toBe(1);
+  });
+  it("denied by the user: shows the reason and does not ask again", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onopen!();
+    socks[0].recv({ type: "pending" });
+    socks[0].recv({ type: "denied", reason: "denied" });
+    expect(socks[0].closed).toBe(true);
+    expect(log.states.at(-1)).toMatchObject({ state: "denied" });
+    expect(statusText(log.states.at(-1))).toMatch(/^Denied: you denied/);
+    socks[0].onclose!();
+    vi.advanceTimersByTime(120000);
+    expect(socks).toHaveLength(1);
+  });
+  it("busy and timeout: shows Denied with the reason and asks again later on the same port", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onopen!();
+    socks[0].recv({ type: "denied", reason: "busy" });
+    expect(statusText(log.states.at(-1))).toMatch(/^Denied: The editor is busy/);
+    socks[0].onclose!();
+    vi.advanceTimersByTime(4999);
+    expect(socks).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(socks).toHaveLength(2);
+    expect(socks[1].url).toContain(":8787/");
+    socks[1].onopen!();
+    socks[1].recv({ type: "denied", reason: "timeout" });
+    socks[1].onclose!();
+    vi.advanceTimersByTime(59999);
+    expect(socks).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(socks).toHaveLength(3);
+  });
+  it("a mismatch is still refused for good; connected shows the badge", () => {
+    expect(statusText({ state: "ready", badge: "synced" })).toBe("synced");
+    expect(statusText({ state: "ready" })).toBe("Connected");
+    expect(statusText({ state: "connecting" })).toBe("Connecting...");
+  });
+  it("makes a 64-hex secret from 32 random bytes", () => {
+    const s = newSecret((a) => a.map((_, i) => i * 8));
+    expect(s).toBe(Array.from({ length: 32 }, (_, i) => (i * 8).toString(16).padStart(2, "0")).join(""));
+    expect(isSecret(s)).toBe(true);
+    expect(isSecret(s.toUpperCase())).toBe(false);
+    expect(isSecret(s.slice(1))).toBe(false);
   });
 });
 

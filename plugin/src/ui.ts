@@ -1,39 +1,48 @@
 // UI iframe: the only network access. Glue between the main thread and SyncClient.
 import { isSimplePng, toBase64 } from "./sync/assets.js";
-import { SyncClient, type Socket } from "./sync/client.js";
+import { statusText, SyncClient, type Socket } from "./sync/client.js";
+import { newSecret } from "./sync/secret.js";
 
 const PORTS = [8787, 8788, 8789, 8790]; // must match manifest devAllowedDomains
 const PLUGIN_VERSION = "0.1.0";
-const $ = (id: string) => document.getElementById(id) as HTMLElement & HTMLInputElement;
+const $ = (id: string) => document.getElementById(id) as HTMLElement & HTMLButtonElement;
 const toMain = (m: object) => parent.postMessage({ pluginMessage: m }, "*");
 let fileKey: string | undefined;
 let client: SyncClient | null = null;
 
+let secret = "";
+let fileName = "";
+
+/** Starts by itself once the main thread has sent the secret: no token, no button. The editor asks the user the first time. */
 function connect() {
   client?.stop();
-  const token = $("token").value.trim();
-  toMain({ kind: "saveToken", value: token });
   client = new SyncClient({
-    ports: PORTS, token, pluginVersion: PLUGIN_VERSION, fileKey,
+    ports: PORTS, pluginSecret: secret, fileName, pluginVersion: PLUGIN_VERSION, fileKey,
     open: (url) => new WebSocket(url) as unknown as Socket,
     timers: { set: (f, ms) => setTimeout(f, ms), clear: (h) => clearTimeout(h as number) },
     requestHashTree: () => toMain({ kind: "requestHashTree" }),
     onResend: (swfId, ids) => toMain({ kind: "resend", swfId, ids }),
     onNeedAssets: (hashes) => toMain({ kind: "needAssets", hashes }),
-    onChange: ({ state, badge, error }) => {
-      const s = state === "ready" ? (badge ?? "connected") : state;
-      $("status").textContent = error ? `${s}: ${error}` : s;
-      $("status").className = state === "refused" || badge === "error" ? "err" : state === "ready" ? "ok" : "";
+    onChange: (s) => {
+      $("status").textContent = statusText(s);
+      $("status").className = s.state === "refused" || s.state === "denied" || s.badge === "error" ? "err" : s.state === "ready" ? "ok" : s.state === "pending" ? "wait" : "";
+      $("retry").hidden = s.state !== "refused" && s.state !== "denied";
     },
   });
   client.start();
 }
-$("go").onclick = connect;
+$("retry").onclick = connect;
 
 onmessage = (e) => {
   const m = e.data.pluginMessage;
   if (!m) return;
-  if (m.kind === "init") { $("token").value = m.token; fileKey = m.fileKey || undefined; }
+  if (m.kind === "init") {
+    fileKey = m.fileKey || undefined;
+    fileName = m.fileName ?? "";
+    secret = m.secret || newSecret((a) => crypto.getRandomValues(a)); // the main thread had no crypto: make it here
+    if (!m.secret) toMain({ kind: "saveSecret", value: secret });
+    connect();
+  }
   else if (m.kind === "patch") client?.send({ type: "patch", seq: m.seq, swfId: m.swfId, ...(m.swf && { swf: m.swf }), patch: m.patch, ...(m.issues && { issues: m.issues }) });
   else if (m.kind === "selection") client?.send({ type: "selection", ids: m.ids });
   else if (m.kind === "hashTree") client?.send({ type: "hashTree", swfId: m.swfId, nodeHashes: m.nodeHashes });

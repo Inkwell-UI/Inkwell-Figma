@@ -2,6 +2,7 @@
 // (the only place with network access). It only reports visuals; it never stores behavior.
 import type { FigNode } from "./serialize/index.js";
 import { collector } from "./sync/debounce.js";
+import { isSecret, newSecret } from "./sync/secret.js";
 import { IdMap, type MappingStore } from "./sync/idmap.js";
 import { Syncer } from "./sync/syncer.js";
 
@@ -67,10 +68,19 @@ figma.on("currentpagechange", () => enqueue(async () => {
 }));
 figma.on("selectionchange", () => post({ kind: "selection", ids: figma.currentPage.selection.map((n) => idMap.id(n)) }));
 
-figma.showUI(__html__, { width: 300, height: 190 });
+figma.showUI(__html__, { width: 300, height: 110 });
 figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[] }) => {
-  if (m.kind === "ready") enqueue(async () => post({ kind: "init", token: (await figma.clientStorage.getAsync("token")) ?? "", fileKey: figma.fileKey }));
-  else if (m.kind === "saveToken") void figma.clientStorage.setAsync("token", m.value);
+  if (m.kind === "ready") enqueue(async () => {
+    // The secret is made once and kept in clientStorage; the editor stores only its SHA-256 after the user allowed it.
+    let secret = await figma.clientStorage.getAsync("pluginSecret");
+    if (!isSecret(secret)) {
+      // shortcut: if this sandbox has no `crypto`, the UI iframe makes the secret and sends it back (saveSecret); unverified in real Figma
+      secret = typeof crypto !== "undefined" ? newSecret((a) => crypto.getRandomValues(a)) : "";
+      if (secret) await figma.clientStorage.setAsync("pluginSecret", secret);
+    }
+    post({ kind: "init", secret, fileName: figma.root.name, fileKey: figma.fileKey });
+  });
+  else if (m.kind === "saveSecret" && isSecret(m.value)) void figma.clientStorage.setAsync("pluginSecret", m.value);
   else if (m.kind === "requestHashTree") enqueue(async () => {
     postSwfs(true);
     for (const [swfId, nodeHashes] of Object.entries(syncer.hashTrees())) post({ kind: "hashTree", swfId, nodeHashes });
