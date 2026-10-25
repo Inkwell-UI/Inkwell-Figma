@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION, SPEC_VERSION } from "@inkwell-ui/spec";
 import { statusText, SyncClient, type Socket } from "../src/sync/client.js";
+import { selectNode } from "../src/sync/select.js";
 import { isSecret, newSecret } from "../src/sync/secret.js";
 
 const SECRET = "ab".repeat(32);
@@ -19,7 +20,7 @@ class FakeSocket implements Socket {
 function setup() {
   vi.useFakeTimers();
   const socks: FakeSocket[] = [];
-  const log = { hashReq: 0, resend: [] as string[][], states: [] as any[], need: [] as string[][] };
+  const log = { hashReq: 0, resend: [] as string[][], states: [] as any[], need: [] as string[][], sel: [] as [string, boolean][] };
   const client = new SyncClient({
     ports: [8787, 8788], pluginSecret: SECRET, fileName: "My HUD", pluginVersion: "0.1.0", fileKey: "FK",
     open: (url) => { const s = new FakeSocket(url); socks.push(s); return s; },
@@ -27,6 +28,7 @@ function setup() {
     requestHashTree: () => log.hashReq++,
     onResend: (swfId, ids) => log.resend.push([swfId, ...ids]),
     onNeedAssets: (h) => log.need.push(h),
+    onSelectNode: (id, focus) => log.sel.push([id, focus]),
     onChange: (s) => log.states.push(s),
   });
   return { client, socks, log };
@@ -198,5 +200,50 @@ describe("SyncClient assets (protocol 3)", () => {
     socks[0].onopen!(); socks[0].recv(ack);
     socks[0].recv({ type: "needAssets", hashes: ["../x"] });
     expect(log.need).toEqual([]);
+  });
+});
+
+describe("selectNode (protocol 5)", () => {
+  it("client forwards it only when ready, with focus defaulting to false", () => {
+    const { client, socks, log } = setup();
+    client.start();
+    socks[0].onopen!();
+    socks[0].recv({ type: "selectNode", nodeId: "1:2" });
+    expect(log.sel).toEqual([]);
+    socks[0].recv(ack);
+    socks[0].recv({ type: "selectNode", nodeId: "1:2" });
+    socks[0].recv({ type: "selectNode", nodeId: "1:3", focus: true });
+    socks[0].recv({ type: "selectNode" });
+    expect(log.sel).toEqual([["1:2", false], ["1:3", true]]);
+  });
+  it("a protocol 4 editor ack is refused by nothing here, but our hello says protocol 5", () => {
+    const { client, socks } = setup();
+    client.start();
+    socks[0].onopen!();
+    expect(PROTOCOL_VERSION).toBe(5);
+    expect(socks[0].sent[0].protocolVersion).toBe(5);
+  });
+  const mk = (nodes: Record<string, any>) => {
+    const page: any = { selection: [] };
+    const zoomed: unknown[][] = [];
+    return { page, zoomed, api: { currentPage: page, getNodeByIdAsync: async (id: string) => nodes[id] ?? null, viewport: { scrollAndZoomIntoView: (n: unknown[]) => zoomed.push(n) } } };
+  };
+  it("selects a node on the page; focus also zooms", async () => {
+    const t = mk({});
+    const n: any = { id: "1:2", type: "FRAME", parent: t.page };
+    const child: any = { id: "1:3", type: "TEXT", parent: n };
+    const api = { ...t.api, getNodeByIdAsync: async (id: string) => (id === "1:2" ? n : id === "1:3" ? child : null) };
+    expect(await selectNode(api as any, "1:3", false)).toBe(true);
+    expect(t.page.selection).toEqual([child]);
+    expect(t.zoomed).toEqual([]);
+    await selectNode(api as any, "1:2", true);
+    expect(t.page.selection).toEqual([n]);
+    expect(t.zoomed).toEqual([[n]]);
+  });
+  it("unknown, removed, other-page and page nodes change nothing", async () => {
+    const { api, page, zoomed } = mk({ r: { id: "r", type: "FRAME", removed: true, parent: null }, o: { id: "o", type: "FRAME", parent: { parent: null } }, p: { id: "p", type: "PAGE", parent: null } });
+    for (const id of ["nope", "r", "o", "p"]) expect(await selectNode(api as any, id, true)).toBe(false);
+    expect(page.selection).toEqual([]);
+    expect(zoomed).toEqual([]);
   });
 });

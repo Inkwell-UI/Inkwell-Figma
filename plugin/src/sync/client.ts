@@ -27,6 +27,8 @@ export interface ClientOpts {
   onResend(swfId: string, ids: string[]): void;
   /** Editor lacks these images (only hashes not yet asked for on this connection); main thread answers via client.send(asset). */
   onNeedAssets?(hashes: string[]): void;
+  /** Editor asked to select (and maybe focus) a layer; the main thread checks it exists. Only called when ready. */
+  onSelectNode?(nodeId: string, focus: boolean): void;
   onChange(s: { state: State; badge?: Badge; error?: string }): void;
 }
 
@@ -120,6 +122,7 @@ export class SyncClient {
     }
     else if (m.type === "error") this.o.onChange({ state: this.state, badge: "error", error: m.message });
     else if (m.type === "resend") this.o.onResend(m.swfId, m.ids);
+    else if (m.type === "selectNode") { if (this.state === "ready") this.o.onSelectNode?.(m.nodeId, m.focus); }
     else if (m.type === "needAssets") {
       const fresh = [...new Set(m.hashes)].filter((h) => !this.asked.has(h));
       for (const h of fresh) this.asked.add(h);

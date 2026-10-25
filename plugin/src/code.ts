@@ -4,6 +4,7 @@ import type { FigNode } from "./serialize/index.js";
 import { collector } from "./sync/debounce.js";
 import { isSecret, newSecret } from "./sync/secret.js";
 import { IdMap, type MappingStore } from "./sync/idmap.js";
+import { selectNode } from "./sync/select.js";
 import { Syncer } from "./sync/syncer.js";
 
 const NS = "inkwell";
@@ -69,7 +70,7 @@ figma.on("currentpagechange", () => enqueue(async () => {
 figma.on("selectionchange", () => post({ kind: "selection", ids: figma.currentPage.selection.map((n) => idMap.id(n)) }));
 
 figma.showUI(__html__, { width: 300, height: 110 });
-figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[] }) => {
+figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[]; nodeId?: string; focus?: boolean }) => {
   if (m.kind === "ready") enqueue(async () => {
     // The secret is made once and kept in clientStorage; the editor stores only its SHA-256 after the user allowed it.
     let secret = await figma.clientStorage.getAsync("pluginSecret");
@@ -86,6 +87,9 @@ figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?:
     for (const [swfId, nodeHashes] of Object.entries(syncer.hashTrees())) post({ kind: "hashTree", swfId, nodeHashes });
   });
   else if (m.kind === "resend") enqueue(async () => { const p = await syncer.resend(m.swfId ?? "", m.ids ?? [], live); if (p) postPatches([p]); });
+  else if (m.kind === "selectNode" && typeof m.nodeId === "string") void selectNode(figma as any, m.nodeId, m.focus === true)
+    .then((ok) => { if (!ok) figma.notify("Inkwell: that layer is not on this page any more", { timeout: 2000 }); })
+    .catch(() => {});
   // Image bytes by hash, only for hashes the editor asked for (it caches them on disk, so this runs once per image).
   else if (m.kind === "needAssets") void (async () => {
     for (const hash of m.hashes ?? []) {

@@ -22,6 +22,7 @@ function connect() {
     timers: { set: (f, ms) => setTimeout(f, ms), clear: (h) => clearTimeout(h as number) },
     requestHashTree: () => toMain({ kind: "requestHashTree" }),
     onResend: (swfId, ids) => toMain({ kind: "resend", swfId, ids }),
+    onSelectNode: (nodeId, focus) => toMain({ kind: "selectNode", nodeId, focus }),
     onNeedAssets: (hashes) => toMain({ kind: "needAssets", hashes }),
     onChange: (s) => {
       $("status").textContent = statusText(s);
