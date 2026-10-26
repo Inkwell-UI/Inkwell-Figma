@@ -1,6 +1,6 @@
 // Main thread: watches the current page, serializes changes to IR patches, hands them to the UI iframe
 // (the only place with network access). It only reports visuals; it never stores behavior.
-import type { FigNode } from "./serialize/index.js";
+import { collectThemes, type FigNode, type VariablesApi } from "./serialize/index.js";
 import { collector } from "./sync/debounce.js";
 import { isSecret, newSecret } from "./sync/secret.js";
 import { IdMap, type MappingStore } from "./sync/idmap.js";
@@ -39,12 +39,26 @@ const postSwfs = (force = false) => {
   if (force || j !== lastSwfs) { lastSwfs = j; post({ kind: "swfs", ...s }); }
 };
 
+// Figma variable collections -> themes (SPEC-CHANGES V6). Variable edits raise no node change, so they are polled; a change re-sends the metadata of every SWF.
+const variablesApi: VariablesApi = {
+  collections: async () => (await figma.variables.getLocalVariableCollectionsAsync()) as any,
+  variable: async (id) => (await figma.variables.getVariableByIdAsync(id)) as any,
+};
+let lastThemes = "";
+async function refreshThemes(force = false): Promise<void> {
+  const themes = await collectThemes(variablesApi);
+  const j = JSON.stringify(themes);
+  syncer.setThemes(themes);
+  if (force || j !== lastThemes) { lastThemes = j; postPatches(syncer.metaPatches()); }
+}
+
 // Serialize runs so patches keep their order.
 let queue: Promise<unknown> = Promise.resolve();
 const enqueue = (fn: () => Promise<void>) => { queue = queue.then(fn).catch((e) => post({ kind: "error", message: String(e) })); };
 
 const changes = collector(150, (ids) => enqueue(async () => {
   for (const id of ids) { const n = await live(id); if (n) await prefetch(n); }
+  await refreshThemes(); // before the patches: their metadata carries the themes
   postPatches(await syncer.flush(ids, live));
   postSwfs();
 }));
@@ -57,6 +71,7 @@ page.on("nodechange", onNodeChange);
 
 async function scan(emit: boolean) {
   await prefetch(figma.currentPage);
+  await refreshThemes();
   const ps = await syncer.scan(figma.currentPage.children as unknown as FigNode[]);
   if (emit) { postPatches(ps); postSwfs(); }
 }
@@ -84,6 +99,7 @@ figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?:
   else if (m.kind === "saveSecret" && isSecret(m.value)) void figma.clientStorage.setAsync("pluginSecret", m.value);
   else if (m.kind === "requestHashTree") enqueue(async () => {
     postSwfs(true);
+    await refreshThemes(true); // a fresh connection gets the themes whether or not a layer changes
     for (const [swfId, nodeHashes] of Object.entries(syncer.hashTrees())) post({ kind: "hashTree", swfId, nodeHashes });
   });
   else if (m.kind === "resend") enqueue(async () => { const p = await syncer.resend(m.swfId ?? "", m.ids ?? [], live); if (p) postPatches([p]); });
@@ -101,4 +117,5 @@ figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?:
     }
   })();
 };
+setInterval(() => enqueue(() => refreshThemes()), 3000); // shortcut: variables have no change event; a poll every 3 s, cheap when nothing changed
 enqueue(() => scan(false)); // baseline only; the editor gets the state through the hash tree on connect

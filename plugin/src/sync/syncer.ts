@@ -1,4 +1,4 @@
-import type { Node, PatchOp, SwfMeta, SyncIssue } from "@inkwell-ui/spec";
+import type { Node, PatchOp, SwfMeta, SyncIssue, Theme } from "@inkwell-ui/spec";
 // deep import: the package root pulls in zod (~800 KB); the main thread only needs the hash
 import { hashNode } from "@inkwell-ui/spec/dist/hash.js";
 import { serializeNode, serializeTree, type Ctx, type FigNode } from "../serialize/index.js";
@@ -23,6 +23,7 @@ export class Syncer {
   private hashes = new Map<string, string>();
   private seq = 0;
   private ctx: Ctx;
+  private themes: Theme[] | undefined; // Figma variable collections (SPEC-CHANGES V6); undefined until the main thread has read them
   constructor(private idMap: IdMap, componentOf: Ctx["componentOf"], styleNameOf?: Ctx["styleNameOf"]) {
     this.ctx = { id: (n) => idMap.id(n), componentOf, styleNameOf };
   }
@@ -35,6 +36,20 @@ export class Syncer {
       if (swf) (out[swf] ??= {})[id] = h;
     }
     return out;
+  }
+
+  /** Sets the variable collections that ride on every SWF's metadata. */
+  setThemes(themes: Theme[]): void { this.themes = themes; }
+
+  /** One patch with no ops and the metadata (name, stage, themes) per known SWF: sent when only the variables changed. */
+  metaPatches(): PatchMessage[] {
+    const out: PatchMessage[] = [];
+    for (const n of this.cache.values()) if (n.parent === null) out.push({ seq: ++this.seq, swfId: n.id, swf: this.meta(n), patch: { ops: [] } });
+    return out;
+  }
+
+  private meta(root: Node): SwfMeta {
+    return { id: root.id, name: root.name, stage: { width: root.transform.width, height: root.transform.height }, ...(this.themes && { themes: this.themes }) };
   }
 
   /** Frames that become SWFs, and loose top-level layers that belong to none. */
@@ -170,7 +185,7 @@ export class Syncer {
   private wrap(swfId: string, ops: PatchOp[], root?: Node): PatchMessage {
     const issues = this.idMap.takeIssues();
     const meta = root && ops.some((o) => o.op === "upsert" && o.node.id === swfId)
-      ? { swf: { id: swfId, name: root.name, stage: { width: root.transform.width, height: root.transform.height } } } : {};
+      ? { swf: this.meta(root) } : {};
     return { seq: ++this.seq, swfId, ...meta, patch: { ops }, ...(issues.length && { issues }) };
   }
 }

@@ -1,6 +1,6 @@
 import type { Node } from "@inkwell-ui/spec";
-import { fillsOf, parsePath, strokesOf } from "./paint.js";
-import type { Ctx, FigNode } from "./types.js";
+import { fillsOf, paintColorBindings, parsePath, strokesOf } from "./paint.js";
+import type { Ctx, FigNode, FigPaint } from "./types.js";
 
 const H: Record<string, string> = { MIN: "left", MAX: "right", CENTER: "center", STRETCH: "stretch", SCALE: "scale" };
 const V: Record<string, string> = { MIN: "top", MAX: "bottom", CENTER: "center", STRETCH: "stretch", SCALE: "scale" };
@@ -24,7 +24,7 @@ const PASSTHROUGH = [
 const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
   "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent",
-  "layoutMode", "itemSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
+  "boundVariables", "layoutMode", "itemSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
   "fillGeometry", "characters", "fontName", "fontSize", "textStyleId", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
 const jsonable = (v: unknown) => v !== undefined && typeof v !== "symbol" && typeof v !== "function";
@@ -58,6 +58,27 @@ function textLayout(n: FigNode) {
   };
 }
 
+/** Variable bindings of a node (SPEC-CHANGES V6.2): IR property path -> variable id. Only the keys of `THEME_BINDING_KEYS`; text fill and size go to run 0. */
+function bindingsOf(n: FigNode, type: Node["type"]): Record<string, { id: string }> {
+  const out: Record<string, { id: string }> = {};
+  const put = (key: string, id: string | undefined) => { if (id) out[key] = { id }; };
+  const bv = n.boundVariables ?? {};
+  const one = (f: string) => { const a = bv[f]; return a && !Array.isArray(a) ? (a as { id?: string }).id : undefined; };
+  put("opacity", one("opacity"));
+  put("visible", one("visible"));
+  put("transform/width", one("width"));
+  put("transform/height", one("height"));
+  const fills = Array.isArray(n.fills) ? (n.fills as readonly FigPaint[]) : undefined;
+  if (type === "text") {
+    put("runs/0/fill/color", paintColorBindings(fills).get(0));
+    put("runs/0/size", one("fontSize"));
+  } else {
+    for (const [i, id] of paintColorBindings(fills)) put(`fills/${i}/color`, id);
+    for (const [i, id] of paintColorBindings(n.strokes)) put(`strokes/${i}/color`, id);
+  }
+  return out;
+}
+
 /** One node, shallow: children are ids only. */
 export function serializeNode(n: FigNode, ctx: Ctx): Node {
   const { fills, dropped: droppedFills } = fillsOf(n);
@@ -72,6 +93,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
   for (const k of Object.keys(n)) if (!HANDLED.has(k) && jsonable((n as any)[k])) unknown[k] = (n as any)[k];
   if (Object.keys(unknown).length) figma.unknown = unknown;
 
+  const bound = bindingsOf(n, type);
   const parentId = n.parent && n.parent.type !== "PAGE" && n.parent.type !== "DOCUMENT" ? ctx.id(n.parent) : null;
   // Figma gives the children of a GROUP coordinates relative to the group's containing frame, not to the group, but a group becomes
   // a frame here, so make the child relative to it. The group's own rotation is dropped for the same reason: its children's
@@ -88,6 +110,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
     opacity: n.opacity ?? 1,
     ...(n.blendMode && { blend: n.blendMode }),
     ...(n.isMask && { mask: true }),
+    ...(Object.keys(bound).length && { bindings: bound }),
   };
   // `figma` is filled lazily below, so build extra at the end.
   const done = (o: object): Node => ({ ...base, ...o, ...(Object.keys(figma).length && { extra: { figma } }) }) as Node;

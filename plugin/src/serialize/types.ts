@@ -9,6 +9,7 @@ export interface FigPaint {
   gradientTransform?: readonly (readonly number[])[];
   imageHash?: string | null;
   scaleMode?: string;
+  boundVariables?: { color?: { id?: string } };
 }
 export interface FigParent { id: string; type: string; x?: number; y?: number; parent?: FigParent | null }
 export interface FigNode {
@@ -17,6 +18,8 @@ export interface FigNode {
   type: string;
   visible?: boolean;
   opacity?: number;
+  /** Figma variable aliases by field (`opacity`, `visible`, `width`, `height`, `fontSize`); paint colours are on the paint. */
+  boundVariables?: Readonly<Record<string, { id?: string } | readonly unknown[] | undefined>>;
   blendMode?: string;
   isMask?: boolean;
   rotation?: number;

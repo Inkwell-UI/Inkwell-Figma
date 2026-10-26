@@ -27,6 +27,19 @@ export function toFill(p: FigPaint): Fill | null {
   }
 }
 
+/** Variable ids bound to the colour of paints, keyed by the index the paint gets in the IR (a hidden or unsupported paint takes no index). */
+export function paintColorBindings(paints: readonly FigPaint[] | undefined): Map<number, string> {
+  const out = new Map<number, string>();
+  let i = 0;
+  for (const p of paints ?? []) {
+    if (!toFill(p)) continue;
+    const id = p.type === "SOLID" ? p.boundVariables?.color?.id : undefined;
+    if (id) out.set(i, id);
+    i++;
+  }
+  return out;
+}
+
 export function fillsOf(n: FigNode): { fills: Fill[]; dropped: FigPaint[] } {
   const fills: Fill[] = [], dropped: FigPaint[] = [];
   if (Array.isArray(n.fills)) for (const p of n.fills as FigPaint[]) { const f = toFill(p); f ? fills.push(f) : dropped.push(p); }
