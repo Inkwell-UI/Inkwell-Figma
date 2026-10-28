@@ -35,6 +35,7 @@ export interface FigNode {
   strokeWeight?: number | Mixed;
   strokeAlign?: string;
   clipsContent?: boolean;
+  overflowDirection?: string;
   layoutMode?: string;
   layoutSizingHorizontal?: string;
   layoutSizingVertical?: string;

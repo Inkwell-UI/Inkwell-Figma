@@ -14,6 +14,12 @@ describe("serialize", () => {
     expect(n).toMatchObject({ type: "frame", clipContent: true, parent: "p", children: ["k"], anchor: { h: "stretch", v: "bottom" },
       autoLayout: { mode: "vertical", spacing: 4, padding: [1, 2, 3, 4] }, transform: { x: 1, y: 2, width: 30, height: 40, rotation: 0 } });
   });
+  it("overflow direction: a scrolling frame says which way, a frame that does not scroll says nothing", () => {
+    expect(ser({ id: "f", name: "F", type: "FRAME", clipsContent: true, overflowDirection: "VERTICAL" })).toMatchObject({ overflow: "vertical" });
+    expect(ser({ id: "f", name: "F", type: "FRAME", overflowDirection: "VERTICAL_SCROLLING" })).toMatchObject({ overflow: "vertical" });
+    expect(ser({ id: "f", name: "F", type: "FRAME", overflowDirection: "BOTH_SCROLLING" })).toMatchObject({ overflow: "both" });
+    expect(ser({ id: "f", name: "F", type: "FRAME", overflowDirection: "NONE" }).overflow).toBeUndefined();
+  });
   it("auto layout: alignment, wrap and per-axis sizing are real fields; a fixed child in the flow gets none", () => {
     const f = ser({ id: "f", name: "F", type: "FRAME", layoutMode: "HORIZONTAL", primaryAxisAlignItems: "SPACE_BETWEEN", counterAxisAlignItems: "BASELINE", layoutWrap: "WRAP", layoutSizingHorizontal: "HUG", layoutSizingVertical: "FIXED" });
     expect(f).toMatchObject({ autoLayout: { mode: "horizontal", primaryAlign: "spaceBetween", counterAlign: "start", wrap: true }, layout: { h: "hug", v: "fixed" } });

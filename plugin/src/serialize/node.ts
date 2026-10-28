@@ -25,11 +25,14 @@ const PASSTHROUGH = [
 // (plain objects only: real Figma nodes expose properties on the prototype, so PASSTHROUGH is the real net).
 const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
-  "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent",
+  "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent", "overflowDirection",
   "boundVariables", "layoutMode", "itemSpacing", "layoutSizingHorizontal", "layoutSizingVertical", "layoutPositioning", "primaryAxisAlignItems", "counterAxisAlignItems", "layoutWrap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
   "fillGeometry", "characters", "fontName", "fontSize", "textStyleId", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
 const jsonable = (v: unknown) => v !== undefined && typeof v !== "symbol" && typeof v !== "function";
+
+// the plugin API says HORIZONTAL, VERTICAL, BOTH; the REST API (and older notes) say *_SCROLLING
+const OVERFLOW: Record<string, string> = { HORIZONTAL: "horizontal", VERTICAL: "vertical", BOTH: "both", HORIZONTAL_SCROLLING: "horizontal", VERTICAL_SCROLLING: "vertical", BOTH_SCROLLING: "both" };
 
 function irType(n: FigNode, fills: { type: string }[], hasStroke: boolean): Node["type"] {
   if (n.type === "TEXT") return "text";
@@ -138,7 +141,8 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       } }),
     };
   };
-  const frameAll = () => ({ clipContent: n.clipsContent ?? false, ...frameLook() });
+  const overflow = OVERFLOW[n.overflowDirection ?? ""]; // Prototype > Overflow behaviour; absent when it does not scroll
+  const frameAll = () => ({ clipContent: n.clipsContent ?? false, ...(overflow && { overflow }), ...frameLook() });
 
   switch (type) {
     case "text": {
