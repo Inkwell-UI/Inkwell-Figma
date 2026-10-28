@@ -86,6 +86,11 @@ describe("serialize", () => {
     const c = ser({ id: "cs", name: "Set", type: "COMPONENT_SET", children: [{ id: "c2", name: "Size=L", type: "COMPONENT" }] });
     expect(c).toMatchObject({ type: "component", variants: [{ name: "Size=L", node: "c2" }] });
   });
+  it("an instance and a component carry their own background, clipping and auto layout", () => {
+    const look = { clipsContent: true, fills: [solid], layoutMode: "VERTICAL", itemSpacing: 4 };
+    expect(ser({ id: "i1", name: "I", type: "INSTANCE", ...look })).toMatchObject({ type: "instance", clipContent: true, fills: [{ type: "solid" }], autoLayout: { mode: "vertical", spacing: 4 } });
+    expect(ser({ id: "c1", name: "C", type: "COMPONENT", ...look })).toMatchObject({ type: "component", clipContent: true, fills: [{ type: "solid" }], autoLayout: { mode: "vertical" } });
+  });
   it("visibility, opacity, blend, mask", () =>
     expect(ser({ id: "f", name: "F", type: "FRAME", visible: false, opacity: 0.5, blendMode: "MULTIPLY", isMask: true })).toMatchObject({ visible: false, opacity: 0.5, blend: "MULTIPLY", mask: true }));
   it("unknown node types, properties and paints are kept in extra", () => {

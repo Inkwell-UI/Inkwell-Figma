@@ -126,6 +126,20 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
   // `figma` is filled lazily below, so build extra at the end.
   const done = (o: object): Node => ({ ...base, ...o, ...(Object.keys(figma).length && { extra: { figma } }) }) as Node;
 
+  // What makes a frame look like one: its fills and auto layout. An instance and a component draw the same way, so they carry it too.
+  const frameLook = () => {
+    const mode = n.layoutMode === "HORIZONTAL" ? "horizontal" : n.layoutMode === "VERTICAL" ? "vertical" : null;
+    if (n.layoutMode && !mode && n.layoutMode !== "NONE") figma.layoutMode = n.layoutMode; // e.g. GRID
+    return {
+      ...(fills.length && { fills }),
+      ...(mode && { autoLayout: {
+        mode, spacing: n.itemSpacing ?? 0, padding: [n.paddingTop ?? 0, n.paddingRight ?? 0, n.paddingBottom ?? 0, n.paddingLeft ?? 0],
+        primaryAlign: PRIMARY[n.primaryAxisAlignItems ?? ""] ?? "start", counterAlign: COUNTER[n.counterAxisAlignItems ?? ""] ?? "start", wrap: n.layoutWrap === "WRAP",
+      } }),
+    };
+  };
+  const frameAll = () => ({ clipContent: n.clipsContent ?? false, ...frameLook() });
+
   switch (type) {
     case "text": {
       const content = n.characters ?? "";
@@ -145,11 +159,11 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       const props = Object.entries(n.componentProperties ?? {});
       const variant = props.filter(([, p]) => p.type === "VARIANT").map(([k, p]) => `${k}=${p.value}`).join(", ");
       const overrides = Object.fromEntries(props.filter(([, p]) => p.type !== "VARIANT").map(([k, p]) => [k, p.value]));
-      return done({ type, component: ctx.componentOf(n) ?? "", ...(variant && { variant }), ...(Object.keys(overrides).length && { overrides }) });
+      return done({ type, component: ctx.componentOf(n) ?? "", ...(variant && { variant }), ...(Object.keys(overrides).length && { overrides }), ...frameAll() });
     }
     case "component": {
       const kids = n.type === "COMPONENT_SET" ? (n.children ?? []) : [n];
-      return done({ type, variants: kids.map((c) => ({ name: c.name, node: ctx.id(c) })) });
+      return done({ type, variants: kids.map((c) => ({ name: c.name, node: ctx.id(c) })), ...frameAll() });
     }
     case "shape": {
       const geo = n.vectorPaths ?? n.fillGeometry ?? [];
@@ -157,17 +171,8 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       if (parsed.some((p) => !p)) figma.rawPaths = geo.map((g) => g.data); // unsupported command: keep the source
       return done({ type, paths: parsed.filter((p): p is NonNullable<typeof p> => !!p), fills, strokes });
     }
-    default: {
-      const mode = n.layoutMode === "HORIZONTAL" ? "horizontal" : n.layoutMode === "VERTICAL" ? "vertical" : null;
-      if (n.layoutMode && !mode && n.layoutMode !== "NONE") figma.layoutMode = n.layoutMode; // e.g. GRID
-      return done({
-        type: "frame", clipContent: n.clipsContent ?? false, ...(fills.length && { fills }),
-        ...(mode && { autoLayout: {
-          mode, spacing: n.itemSpacing ?? 0, padding: [n.paddingTop ?? 0, n.paddingRight ?? 0, n.paddingBottom ?? 0, n.paddingLeft ?? 0],
-          primaryAlign: PRIMARY[n.primaryAxisAlignItems ?? ""] ?? "start", counterAlign: COUNTER[n.counterAxisAlignItems ?? ""] ?? "start", wrap: n.layoutWrap === "WRAP",
-        } }),
-      });
-    }
+    default:
+      return done({ type: "frame", ...frameAll() });
   }
 }
 
