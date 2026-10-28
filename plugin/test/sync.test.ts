@@ -156,13 +156,15 @@ describe("one SWF per top-level frame", () => {
     const ps = await syncer.scan(d.roots());
     expect(ps.flatMap((p) => p.patch.ops.map((o: any) => o.node.id)).sort()).toEqual(["1:1", "1:2", "2:1", "2:2"]);
     expect(await syncer.flush(["3:1", "4:2"], d.live)).toEqual([]);
-    expect(syncer.swfs(d.roots())).toEqual({ frames: [{ id: "1:1", name: "Hud" }, { id: "2:1", name: "Menu" }], loose: [{ id: "3:1", name: "Stray" }, { id: "4:1", name: "Grp" }] });
+    expect(syncer.swfs(d.roots())).toEqual({ frames: [{ id: "1:1", name: "Hud" }, { id: "2:1", name: "Menu" }], loose: [{ id: "3:1", name: "Stray" }, { id: "4:1", name: "Grp" }], components: [] });
   });
   it("a component on the page (kept away from the design) is not reported as a loose layer", () => {
     const { d, syncer } = two();
     d.add("5:1", null, { type: "COMPONENT", name: "ListItem" });
     d.add("6:1", null, { type: "COMPONENT_SET", name: "Button" });
-    expect(syncer.swfs(d.roots()).loose).toEqual([]);
+    const s = syncer.swfs(d.roots());
+    expect(s.loose).toEqual([]);
+    expect(s.components).toEqual([{ id: "5:1", name: "ListItem" }, { id: "6:1", name: "Button" }]);
   });
   it("deleting a frame removes its root from that swf only", async () => {
     const { d, syncer } = two();

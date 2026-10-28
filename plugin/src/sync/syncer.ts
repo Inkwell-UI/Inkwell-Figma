@@ -6,7 +6,7 @@ import type { IdMap } from "./idmap.js";
 
 /** One patch for one SWF (= one top-level Figma frame); `swf` rides along when the root is upserted. */
 export interface PatchMessage { seq: number; swfId: string; swf?: SwfMeta; patch: { ops: PatchOp[] }; issues?: SyncIssue[] }
-export interface Swfs { frames: { id: string; name: string }[]; loose: { id: string; name: string }[] }
+export interface Swfs { frames: { id: string; name: string }[]; loose: { id: string; name: string }[]; components: { id: string; name: string }[] }
 // async because dynamic-page mode only offers getNodeByIdAsync
 type Live = (figmaId: string) => Promise<FigNode | null>;
 const isScoped = (p?: { type: string } | null) => !!p && p.type !== "PAGE" && p.type !== "DOCUMENT";
@@ -54,8 +54,8 @@ export class Syncer {
 
   /** Frames that become SWFs, and loose top-level layers that belong to none. A component kept off the design (to be added by code) is neither: it is not a stray layer. */
   swfs(top: readonly FigNode[]): Swfs {
-    const r: Swfs = { frames: [], loose: [] };
-    for (const n of top) if (n.type !== "COMPONENT" && n.type !== "COMPONENT_SET") (n.type === "FRAME" ? r.frames : r.loose).push({ id: this.idMap.id(n), name: n.name });
+    const r: Swfs = { frames: [], loose: [], components: [] };
+    for (const n of top) (n.type === "COMPONENT" || n.type === "COMPONENT_SET" ? r.components : n.type === "FRAME" ? r.frames : r.loose).push({ id: this.idMap.id(n), name: n.name });
     return r;
   }
 
