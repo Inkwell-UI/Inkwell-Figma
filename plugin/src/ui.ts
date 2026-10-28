@@ -4,7 +4,7 @@ import { statusText, SyncClient, type Socket } from "./sync/client.js";
 import { newSecret } from "./sync/secret.js";
 
 const PORTS = [8787, 8788, 8789, 8790]; // must match manifest devAllowedDomains
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.5.0";
 const $ = (id: string) => document.getElementById(id) as HTMLElement & HTMLButtonElement;
 const toMain = (m: object) => parent.postMessage({ pluginMessage: m }, "*");
 let fileKey: string | undefined;
