@@ -47,7 +47,7 @@ onmessage = (e) => {
   else if (m.kind === "patch") client?.send({ type: "patch", seq: m.seq, swfId: m.swfId, ...(m.swf && { swf: m.swf }), patch: m.patch, ...(m.issues && { issues: m.issues }) });
   else if (m.kind === "selection") client?.send({ type: "selection", ids: m.ids });
   else if (m.kind === "hashTree") client?.send({ type: "hashTree", swfId: m.swfId, nodeHashes: m.nodeHashes });
-  else if (m.kind === "swfs") client?.send({ type: "swfs", frames: m.frames, loose: m.loose });
+  else if (m.kind === "swfs") client?.send({ type: "swfs", frames: m.frames, loose: m.loose, components: m.components, componentTrees: m.componentTrees });
   else if (m.kind === "asset") void toPng(m.bytes).then(
     (png) => client?.send({ type: "asset", hash: m.hash, data: toBase64(png) }),
     (e) => { $("status").textContent = `image ${m.hash.slice(0, 8)}: ${e}`; },

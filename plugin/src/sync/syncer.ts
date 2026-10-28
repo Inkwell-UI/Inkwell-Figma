@@ -59,6 +59,11 @@ export class Syncer {
     return r;
   }
 
+  /** The inside of every component kept on the page away from the design (the component and all it holds): not synced like a SWF, only described, so the editor can show what it is made of. */
+  componentTrees(top: readonly FigNode[]): { id: string; name: string; nodes: Node[] }[] {
+    return top.filter((n) => n.type === "COMPONENT" || n.type === "COMPONENT_SET").map((n) => ({ id: this.idMap.id(n), name: n.name, nodes: serializeTree(n, this.ctx) }));
+  }
+
   private rootOf(id: string, ...maps: Map<string, Node>[]): string | undefined {
     let cur: string | null = id;
     for (let i = 0; cur !== null && i < 10000; i++) {

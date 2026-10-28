@@ -165,6 +165,8 @@ describe("one SWF per top-level frame", () => {
     const s = syncer.swfs(d.roots());
     expect(s.loose).toEqual([]);
     expect(s.components).toEqual([{ id: "5:1", name: "ListItem" }, { id: "6:1", name: "Button" }]);
+    const trees = syncer.componentTrees(d.roots());
+    expect(trees.map((t) => [t.id, t.nodes.map((n) => n.id)])).toEqual([["5:1", ["5:1"]], ["6:1", ["6:1"]]]);
   });
   it("deleting a frame removes its root from that swf only", async () => {
     const { d, syncer } = two();

@@ -35,8 +35,9 @@ const postPatches = (ps: object[]) => { for (const p of ps) post({ kind: "patch"
 let lastSwfs = "";
 const postSwfs = (force = false) => {
   const s = syncer.swfs(figma.currentPage.children as unknown as FigNode[]);
-  const j = JSON.stringify(s);
-  if (force || j !== lastSwfs) { lastSwfs = j; post({ kind: "swfs", ...s }); }
+  const componentTrees = syncer.componentTrees(figma.currentPage.children as unknown as FigNode[]);
+  const j = JSON.stringify([s, componentTrees]);
+  if (force || j !== lastSwfs) { lastSwfs = j; post({ kind: "swfs", ...s, componentTrees }); }
 };
 
 // Figma variable collections -> themes (SPEC-CHANGES V6). Variable edits raise no node change, so they are polled; a change re-sends the metadata of every SWF.
