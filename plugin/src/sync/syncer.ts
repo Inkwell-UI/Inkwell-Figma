@@ -52,10 +52,10 @@ export class Syncer {
     return { id: root.id, name: root.name, stage: { width: root.transform.width, height: root.transform.height }, ...(this.themes && { themes: this.themes }) };
   }
 
-  /** Frames that become SWFs, and loose top-level layers that belong to none. */
+  /** Frames that become SWFs, and loose top-level layers that belong to none. A component kept off the design (to be added by code) is neither: it is not a stray layer. */
   swfs(top: readonly FigNode[]): Swfs {
     const r: Swfs = { frames: [], loose: [] };
-    for (const n of top) (n.type === "FRAME" ? r.frames : r.loose).push({ id: this.idMap.id(n), name: n.name });
+    for (const n of top) if (n.type !== "COMPONENT" && n.type !== "COMPONENT_SET") (n.type === "FRAME" ? r.frames : r.loose).push({ id: this.idMap.id(n), name: n.name });
     return r;
   }
 
