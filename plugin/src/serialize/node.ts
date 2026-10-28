@@ -9,14 +9,16 @@ const SIZING: Record<string, string> = { NONE: "fixed", TRUNCATE: "fixed", WIDTH
 const TEXT_H: Record<string, string> = { LEFT: "left", CENTER: "center", RIGHT: "right", JUSTIFIED: "justify" };
 const TEXT_V: Record<string, string> = { TOP: "top", CENTER: "center", BOTTOM: "bottom" };
 const UNIT: Record<string, "px" | "percent"> = { PIXELS: "px", PERCENT: "percent" };
+const SIZE: Record<string, string> = { FIXED: "fixed", HUG: "hug", FILL: "fill" };
+const PRIMARY: Record<string, string> = { MIN: "start", CENTER: "center", MAX: "end", SPACE_BETWEEN: "spaceBetween" };
+const COUNTER: Record<string, string> = { MIN: "start", CENTER: "center", MAX: "end", BASELINE: "start" };
 const PLAIN = ["FRAME", "RECTANGLE", "ELLIPSE", "VECTOR", "TEXT", "INSTANCE", "COMPONENT"];
 
 // Known Figma properties with no IR field yet: kept verbatim under extra.figma, never dropped.
 const PASSTHROUGH = [
   "effects", "cornerRadius", "topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius",
-  "strokeCap", "strokeJoin", "strokeMiterLimit", "dashPattern", "layoutSizingHorizontal", "layoutSizingVertical",
-  "layoutPositioning", "layoutGrow", "layoutAlign", "primaryAxisAlignItems", "counterAxisAlignItems",
-  "primaryAxisSizingMode", "counterAxisSizingMode", "layoutWrap", "counterAxisSpacing", "maskType",
+  "strokeCap", "strokeJoin", "strokeMiterLimit", "dashPattern", "layoutGrow", "layoutAlign",
+  "primaryAxisSizingMode", "counterAxisSizingMode", "counterAxisSpacing", "maskType",
   "textCase", "textDecoration",
 ];
 // Properties the serializer reads or that are structural. Any other own-enumerable key also goes to extra
@@ -24,7 +26,7 @@ const PASSTHROUGH = [
 const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
   "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent",
-  "boundVariables", "layoutMode", "itemSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
+  "boundVariables", "layoutMode", "itemSpacing", "layoutSizingHorizontal", "layoutSizingVertical", "layoutPositioning", "primaryAxisAlignItems", "counterAxisAlignItems", "layoutWrap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
   "fillGeometry", "characters", "fontName", "fontSize", "textStyleId", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
 const jsonable = (v: unknown) => v !== undefined && typeof v !== "symbol" && typeof v !== "function";
@@ -79,6 +81,14 @@ function bindingsOf(n: FigNode, type: Node["type"]): Record<string, { id: string
   return out;
 }
 
+/** Auto layout sizing of a node (spec 9): omitted when it is fixed on both axes and in the flow, which is what an absent `layout` means. */
+function layoutOf(n: FigNode): { layout?: { h: string; v: string; absolute?: boolean } } {
+  const h = SIZE[n.layoutSizingHorizontal ?? ""] ?? "fixed";
+  const v = SIZE[n.layoutSizingVertical ?? ""] ?? "fixed";
+  const absolute = n.layoutPositioning === "ABSOLUTE";
+  return h === "fixed" && v === "fixed" && !absolute ? {} : { layout: { h, v, ...(absolute && { absolute }) } };
+}
+
 /** One node, shallow: children are ids only. */
 export function serializeNode(n: FigNode, ctx: Ctx): Node {
   const { fills, dropped: droppedFills } = fillsOf(n);
@@ -110,6 +120,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
     opacity: n.opacity ?? 1,
     ...(n.blendMode && { blend: n.blendMode }),
     ...(n.isMask && { mask: true }),
+    ...layoutOf(n),
     ...(Object.keys(bound).length && { bindings: bound }),
   };
   // `figma` is filled lazily below, so build extra at the end.
@@ -151,7 +162,10 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
       if (n.layoutMode && !mode && n.layoutMode !== "NONE") figma.layoutMode = n.layoutMode; // e.g. GRID
       return done({
         type: "frame", clipContent: n.clipsContent ?? false, ...(fills.length && { fills }),
-        ...(mode && { autoLayout: { mode, spacing: n.itemSpacing ?? 0, padding: [n.paddingTop ?? 0, n.paddingRight ?? 0, n.paddingBottom ?? 0, n.paddingLeft ?? 0] } }),
+        ...(mode && { autoLayout: {
+          mode, spacing: n.itemSpacing ?? 0, padding: [n.paddingTop ?? 0, n.paddingRight ?? 0, n.paddingBottom ?? 0, n.paddingLeft ?? 0],
+          primaryAlign: PRIMARY[n.primaryAxisAlignItems ?? ""] ?? "start", counterAlign: COUNTER[n.counterAxisAlignItems ?? ""] ?? "start", wrap: n.layoutWrap === "WRAP",
+        } }),
       });
     }
   }

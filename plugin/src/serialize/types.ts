@@ -36,6 +36,12 @@ export interface FigNode {
   strokeAlign?: string;
   clipsContent?: boolean;
   layoutMode?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  layoutPositioning?: string;
+  primaryAxisAlignItems?: string;
+  counterAxisAlignItems?: string;
+  layoutWrap?: string;
   itemSpacing?: number;
   paddingTop?: number;
   paddingRight?: number;

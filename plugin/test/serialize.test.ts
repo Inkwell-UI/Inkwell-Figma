@@ -14,6 +14,13 @@ describe("serialize", () => {
     expect(n).toMatchObject({ type: "frame", clipContent: true, parent: "p", children: ["k"], anchor: { h: "stretch", v: "bottom" },
       autoLayout: { mode: "vertical", spacing: 4, padding: [1, 2, 3, 4] }, transform: { x: 1, y: 2, width: 30, height: 40, rotation: 0 } });
   });
+  it("auto layout: alignment, wrap and per-axis sizing are real fields; a fixed child in the flow gets none", () => {
+    const f = ser({ id: "f", name: "F", type: "FRAME", layoutMode: "HORIZONTAL", primaryAxisAlignItems: "SPACE_BETWEEN", counterAxisAlignItems: "BASELINE", layoutWrap: "WRAP", layoutSizingHorizontal: "HUG", layoutSizingVertical: "FIXED" });
+    expect(f).toMatchObject({ autoLayout: { mode: "horizontal", primaryAlign: "spaceBetween", counterAlign: "start", wrap: true }, layout: { h: "hug", v: "fixed" } });
+    expect(ser({ id: "c", name: "C", type: "FRAME", layoutSizingHorizontal: "FIXED", layoutSizingVertical: "FIXED" }).layout).toBeUndefined();
+    expect(ser({ id: "c", name: "C", type: "TEXT", layoutSizingHorizontal: "FILL", layoutSizingVertical: "HUG", layoutPositioning: "ABSOLUTE" }).layout).toEqual({ h: "fill", v: "hug", absolute: true });
+    expect(f.extra?.figma).toBeUndefined()
+  });
   it("group: children are relative to the group (Figma gives frame-relative coordinates), the group's rotation is dropped", () => {
     const group = { id: "g", name: "G", type: "GROUP", x: 100, y: 50, rotation: 30 } as const;
     const g = ser({ ...group, children: [{ id: "r", name: "R", type: "RECTANGLE" }] });
