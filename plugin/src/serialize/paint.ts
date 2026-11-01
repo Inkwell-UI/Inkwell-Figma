@@ -49,10 +49,13 @@ export function fillsOf(n: FigNode): { fills: Fill[]; dropped: FigPaint[] } {
 const ALIGN = { INSIDE: "inside", OUTSIDE: "outside", CENTER: "center" } as const;
 export function strokesOf(n: FigNode): { strokes: Stroke[]; dropped: FigPaint[] } {
   const strokes: Stroke[] = [], dropped: FigPaint[] = [];
-  const weight = typeof n.strokeWeight === "number" ? n.strokeWeight : 0;
+  // Individual strokes: strokeWeight is figma.mixed when the sides differ, so read the four side weights.
+  const w = [n.strokeTopWeight, n.strokeRightWeight, n.strokeBottomWeight, n.strokeLeftWeight];
+  const sides = w.every((v) => typeof v === "number") && new Set(w).size > 1 ? { top: w[0]!, right: w[1]!, bottom: w[2]!, left: w[3]! } : undefined;
+  const weight = typeof n.strokeWeight === "number" ? n.strokeWeight : sides ? Math.max(...w as number[]) : 0;
   for (const p of n.strokes ?? []) {
     const fill = toFill(p);
-    fill ? strokes.push({ fill, weight, alignment: ALIGN[n.strokeAlign as keyof typeof ALIGN] ?? "center" }) : dropped.push(p);
+    fill ? strokes.push({ fill, weight, alignment: ALIGN[n.strokeAlign as keyof typeof ALIGN] ?? "center", ...(sides && { sides }) }) : dropped.push(p);
   }
   return { strokes, dropped };
 }

@@ -34,6 +34,10 @@ export interface FigNode {
   strokes?: readonly FigPaint[];
   strokeWeight?: number | Mixed;
   strokeAlign?: string;
+  strokeTopWeight?: number;
+  strokeRightWeight?: number;
+  strokeBottomWeight?: number;
+  strokeLeftWeight?: number;
   clipsContent?: boolean;
   overflowDirection?: string;
   layoutMode?: string;

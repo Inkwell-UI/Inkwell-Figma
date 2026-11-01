@@ -48,6 +48,13 @@ describe("serialize", () => {
     expect(n.fills[1].transform).toEqual([1, 0, 0, 0, 1, 0]);
     expect(n.strokes).toMatchObject([{ weight: 2, alignment: "outside" }]);
   });
+  it("a frame keeps its strokes, with the side weights of individual strokes", () => {
+    const mixed = Symbol("mixed");
+    expect(ser({ id: "f", name: "F", type: "FRAME", strokes: [solid], strokeWeight: 2, strokeAlign: "INSIDE" })).toMatchObject({ type: "frame", strokes: [{ weight: 2, alignment: "inside" }] });
+    const n: any = ser({ id: "f", name: "F", type: "FRAME", strokes: [solid], strokeWeight: mixed, strokeAlign: "INSIDE", strokeTopWeight: 0, strokeRightWeight: 0, strokeBottomWeight: 2, strokeLeftWeight: 0 });
+    expect(n.strokes).toEqual([expect.objectContaining({ weight: 2, sides: { top: 0, right: 0, bottom: 2, left: 0 } })]);
+    expect(ser({ id: "f", name: "F", type: "FRAME" })).not.toHaveProperty("strokes");
+  });
   it("rectangle uses fillGeometry; Q becomes cubic", () => {
     expect(ser({ id: "r", name: "R", type: "RECTANGLE", fillGeometry: [{ data: "M 0 0 L 10 0 L 10 10 Z" }] }).paths[0]).toHaveLength(4);
     expect(parsePath("M 0 0 Q 3 3 6 0")![1]).toMatchObject({ op: "C", x: 6, y: 0 });

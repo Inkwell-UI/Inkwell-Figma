@@ -25,7 +25,7 @@ const PASSTHROUGH = [
 // (plain objects only: real Figma nodes expose properties on the prototype, so PASSTHROUGH is the real net).
 const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
-  "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "clipsContent", "overflowDirection",
+  "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "strokeTopWeight", "strokeRightWeight", "strokeBottomWeight", "strokeLeftWeight", "clipsContent", "overflowDirection",
   "boundVariables", "layoutMode", "itemSpacing", "layoutSizingHorizontal", "layoutSizingVertical", "layoutPositioning", "primaryAxisAlignItems", "counterAxisAlignItems", "layoutWrap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
   "fillGeometry", "characters", "fontName", "fontSize", "textStyleId", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
@@ -135,6 +135,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
     if (n.layoutMode && !mode && n.layoutMode !== "NONE") figma.layoutMode = n.layoutMode; // e.g. GRID
     return {
       ...(fills.length && { fills }),
+      ...(strokes.length && { strokes }),
       ...(mode && { autoLayout: {
         mode, spacing: n.itemSpacing ?? 0, padding: [n.paddingTop ?? 0, n.paddingRight ?? 0, n.paddingBottom ?? 0, n.paddingLeft ?? 0],
         primaryAlign: PRIMARY[n.primaryAxisAlignItems ?? ""] ?? "start", counterAlign: COUNTER[n.counterAxisAlignItems ?? ""] ?? "start", wrap: n.layoutWrap === "WRAP",
