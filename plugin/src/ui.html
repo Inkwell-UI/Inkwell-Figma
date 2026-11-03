@@ -1,4 +1,25 @@
-<style>body{font:12px sans-serif;margin:8px}button{width:100%;margin:2px 0}#status{padding:4px;background:#eee;word-break:break-word}.ok{background:#cfc!important}.err{background:#fcc!important}.wait{background:#ffd!important}</style>
-<div id="status">Connecting...</div>
-<button id="retry" hidden>Ask again</button>
+<meta charset="utf-8">
+<style>
+body{margin:0;padding:10px;font:12px/1.4 Inter,system-ui,sans-serif;background:var(--figma-color-bg,#fff);color:var(--figma-color-text,#222)}
+.dim{color:var(--figma-color-text-secondary,#666)}.small{font-size:11px}
+.line{display:flex;align-items:center;gap:8px;min-height:28px;font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--figma-color-icon-tertiary,#999)}
+.ok{background:var(--figma-color-icon-success,#1a9e5c)}.err{background:var(--figma-color-icon-danger,#d93a36)}.wait{background:var(--figma-color-icon-warning,#d98b00)}.busy{background:var(--figma-color-icon-brand,#0d99ff)}
+.wait,.busy{animation:p 1.4s ease-in-out infinite}@keyframes p{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.wait,.busy{animation:none}}
+#sub{padding-left:16px;word-break:break-word}
+#frames{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+#frames li{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;border-radius:4px;background:var(--figma-color-bg-secondary,#f2f2f2)}
+#frames .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#note{margin-top:8px;padding:6px 8px;border-radius:4px;background:var(--figma-color-bg-warning-tertiary,#fff1d6)}
+#retry{width:100%;height:28px;margin-top:8px;border:0;border-radius:4px;font:inherit;cursor:pointer;background:var(--figma-color-bg-secondary,#eee);color:inherit}
+#retry:hover{background:var(--figma-color-bg-hover,#e4e4e4)}
+</style>
+<div id="app">
+  <div class="line"><span class="dot" id="dot"></span><span id="head">Looking for Inkwell&hellip;</span></div>
+  <div class="dim" id="sub"></div>
+  <ul id="frames" hidden></ul>
+  <div id="note" hidden></div>
+  <button id="retry" hidden>Ask again</button>
+</div>
 <script>/*SCRIPT*/</script>

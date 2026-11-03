@@ -11,6 +11,8 @@ export interface Socket {
 export type State = "disconnected" | "connecting" | "handshaking" | "pending" | "denied" | "ready" | "refused";
 export type Badge = "synced" | "compiling" | "error";
 
+export interface Status { state: State; badge?: Badge; error?: string; swfs?: Record<string, Badge> }
+
 export interface ClientOpts {
   ports: readonly number[];
   /** Random 256-bit credential (64 hex), made once and kept in figma.clientStorage; the editor stores only its SHA-256 once the user allowed it. */
@@ -29,20 +31,27 @@ export interface ClientOpts {
   onNeedAssets?(hashes: string[]): void;
   /** Editor asked to select (and maybe focus) a layer; the main thread checks it exists. Only called when ready. */
   onSelectNode?(nodeId: string, focus: boolean): void;
-  onChange(s: { state: State; badge?: Badge; error?: string }): void;
+  onChange(s: Status): void;
 }
 
 /** Delay before asking again after the editor said `busy` (it prompts at most once a minute) or `timeout` (the user did not answer). */
 export const busyDelay = (failures: number) => Math.min(5000 * 2 ** failures, 60000);
 
-/** What the plugin window shows for a state (the editor's `error` text is appended when there is one). */
-export function statusText(s: { state: State; badge?: Badge; error?: string }): string {
-  const base = {
-    disconnected: "Disconnected", connecting: "Connecting...", handshaking: "Connecting...",
-    pending: "Waiting for approval in the editor", denied: "Denied", refused: "Refused",
-    ready: s.badge ?? "Connected",
-  }[s.state];
-  return s.error ? `${base}: ${s.error}` : base;
+export type Tone = "off" | "busy" | "wait" | "ok" | "err";
+/** What the plugin window says for a state, from the user's side: a dot colour, a headline and a line of help (the editor's `error` text is the help when there is one). */
+export function describeStatus(s: Status): { tone: Tone; head: string; sub: string } {
+  const up = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  switch (s.state) {
+    case "connecting": case "handshaking": return { tone: "busy", head: "Looking for Inkwell\u2026", sub: "Open the Inkwell editor on this computer." };
+    case "pending": return { tone: "wait", head: "Waiting for you to allow it", sub: "Switch to the Inkwell window and choose Allow." };
+    case "denied": return { tone: "err", head: "Inkwell said no", sub: up(s.error ?? "") };
+    case "refused": return { tone: "err", head: "Plugin and editor do not match", sub: up(s.error ?? "") };
+    case "ready":
+      if (s.badge === "error") return { tone: "err", head: "Build error", sub: s.error ?? "" };
+      if (s.badge === "compiling") return { tone: "busy", head: "Building\u2026", sub: "" };
+      return { tone: "ok", head: "Connected to Inkwell", sub: "" };
+    default: return { tone: "off", head: "Not connected", sub: "Open the Inkwell editor on this computer." };
+  }
 }
 
 /** Plugin-side protocol: port scan, hello/helloAck (approved by the user in the editor on first use), backoff reconnect, hash tree on (re)connect. */
@@ -118,7 +127,7 @@ export class SyncClient {
       this.badges.set(m.swfId ?? "", m.state);
       const all = [...this.badges.values()];
       const badge = all.includes("error") ? "error" : all.includes("compiling") ? "compiling" : "synced";
-      this.o.onChange({ state: this.state, badge, error: m.issues?.[0]?.message });
+      this.o.onChange({ state: this.state, badge, error: m.issues?.[0]?.message, swfs: Object.fromEntries(this.badges) });
     }
     else if (m.type === "error") this.o.onChange({ state: this.state, badge: "error", error: m.message });
     else if (m.type === "resend") this.o.onResend(m.swfId, m.ids);

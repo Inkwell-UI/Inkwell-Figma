@@ -85,8 +85,8 @@ figma.on("currentpagechange", () => enqueue(async () => {
 }));
 figma.on("selectionchange", () => post({ kind: "selection", ids: figma.currentPage.selection.map((n) => idMap.id(n)) }));
 
-figma.showUI(__html__, { width: 300, height: 110 });
-figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[]; nodeId?: string; focus?: boolean }) => {
+figma.showUI(__html__, { width: 300, height: 110, themeColors: true });
+figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[]; nodeId?: string; focus?: boolean; height?: number }) => {
   if (m.kind === "ready") enqueue(async () => {
     // The secret is made once and kept in clientStorage; the editor stores only its SHA-256 after the user allowed it.
     let secret = await figma.clientStorage.getAsync("pluginSecret");
@@ -97,6 +97,7 @@ figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?:
     }
     post({ kind: "init", secret, fileName: figma.root.name, fileKey: figma.fileKey });
   });
+  else if (m.kind === "resize" && typeof m.height === "number") figma.ui.resize(300, Math.round(Math.min(420, Math.max(70, m.height))));
   else if (m.kind === "saveSecret" && isSecret(m.value)) void figma.clientStorage.setAsync("pluginSecret", m.value);
   else if (m.kind === "requestHashTree") enqueue(async () => {
     postSwfs(true);

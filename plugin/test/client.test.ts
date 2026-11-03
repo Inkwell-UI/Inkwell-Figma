@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION, SPEC_VERSION } from "@inkwell-ui/spec";
-import { statusText, SyncClient, type Socket } from "../src/sync/client.js";
+import { describeStatus, SyncClient, type Socket } from "../src/sync/client.js";
 import { selectNode } from "../src/sync/select.js";
 import { isSecret, newSecret } from "../src/sync/secret.js";
 
@@ -121,7 +121,7 @@ describe("SyncClient approval (protocol 4)", () => {
     socks[0].onopen!();
     socks[0].recv({ type: "pending" });
     expect(client.state).toBe("pending");
-    expect(statusText(log.states.at(-1))).toBe("Waiting for approval in the editor");
+    expect(describeStatus(log.states.at(-1)).head).toBe("Waiting for you to allow it");
     client.send({ type: "selection", ids: ["a"] }); // not approved yet: dropped
     expect(socks[0].sent).toHaveLength(1);
     socks[0].recv(ack);
@@ -136,7 +136,7 @@ describe("SyncClient approval (protocol 4)", () => {
     socks[0].recv({ type: "denied", reason: "denied" });
     expect(socks[0].closed).toBe(true);
     expect(log.states.at(-1)).toMatchObject({ state: "denied" });
-    expect(statusText(log.states.at(-1))).toMatch(/^Denied: you denied/);
+    expect(describeStatus(log.states.at(-1))).toMatchObject({ tone: "err", head: "Inkwell said no", sub: expect.stringMatching(/^You denied/) });
     socks[0].onclose!();
     vi.advanceTimersByTime(120000);
     expect(socks).toHaveLength(1);
@@ -146,7 +146,7 @@ describe("SyncClient approval (protocol 4)", () => {
     client.start();
     socks[0].onopen!();
     socks[0].recv({ type: "denied", reason: "busy" });
-    expect(statusText(log.states.at(-1))).toMatch(/^Denied: The editor is busy/);
+    expect(describeStatus(log.states.at(-1)).sub).toMatch(/^The editor is busy/);
     socks[0].onclose!();
     vi.advanceTimersByTime(4999);
     expect(socks).toHaveLength(1);
@@ -162,9 +162,9 @@ describe("SyncClient approval (protocol 4)", () => {
     expect(socks).toHaveLength(3);
   });
   it("a mismatch is still refused for good; connected shows the badge", () => {
-    expect(statusText({ state: "ready", badge: "synced" })).toBe("synced");
-    expect(statusText({ state: "ready" })).toBe("Connected");
-    expect(statusText({ state: "connecting" })).toBe("Connecting...");
+    expect(describeStatus({ state: "ready", badge: "synced" }).head).toBe("Connected to Inkwell");
+    expect(describeStatus({ state: "ready", badge: "error", error: "bad font" })).toMatchObject({ tone: "err", sub: "bad font" });
+    expect(describeStatus({ state: "connecting" }).tone).toBe("busy");
   });
   it("makes a 64-hex secret from 32 random bytes", () => {
     const s = newSecret((a) => a.map((_, i) => i * 8));
