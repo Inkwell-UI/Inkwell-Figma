@@ -1,7 +1,7 @@
 import { build } from "esbuild";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const common = { bundle: true, target: "es2017", write: false, logLevel: "warning" };
+const common = { bundle: true, charset: "ascii", target: "es2017", write: false, logLevel: "warning" };
 mkdirSync("plugin/dist", { recursive: true });
 
 const code = await build({ ...common, entryPoints: ["plugin/src/code.ts"], format: "iife" });
