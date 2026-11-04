@@ -31,3 +31,15 @@ TypeScript, Figma Plugin API. Patch, IR and protocol types come from `@inkwell-u
 - **Distribution:** from GitHub only, imported from its manifest in the Figma desktop app. The editor bundles this plugin and checks its version in the handshake; bump the protocol version in inkwell-spec when the handshake changes.
 
 **Status (0.5, 2026-10-28):** plugin 0.5.0, built against spec 8 / protocol 5 (rebuild with `yarn build` after a Spec change; the editor refuses a mismatch). The portable editor zip carries `plugin/manifest.json` and `plugin/dist` in `Inkwell-Figma-Plugin/`. Not run inside Figma in 0.5 (tests only).
+
+## Agent logging (required for all agents and subagents, any model)
+Log your work in `d:\Mods\Inkwell\agents-logs\YYYY-MM-DD.md` (today's date).
+1. Log one entry per user request, including short follow-ups ("try this fix", "yes do it"). Write it before your first edit for that request, not after. Only log when you actually write something (files, code, config); if the request is research only, don't log. Before writing, open today's log; if it doesn't exist, create it with the heading `# Agent log — YYYY-MM-DD`.
+2. Append (never edit or delete) one entry:
+   ```
+   ## HH:MM · agent|subagent (model-id)[, spawned by agent HH:MM]
+   - **User request:** one-line summary
+   - **Doing:** one or two lines on how you're fulfilling it
+   ```
+3. Say `subagent` if another agent spawned you automatically, otherwise `agent`.
+4. The entry may be written by a haiku model.
