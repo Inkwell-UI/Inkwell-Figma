@@ -1,5 +1,5 @@
 import type { Node } from "@inkwell-ui/spec";
-import { fillsOf, paintColorBindings, parsePath, strokesOf } from "./paint.js";
+import { fillsOf, paintColorBindings, paintsOf, parsePath, stopColorBindings, strokesOf } from "./paint.js";
 import type { Ctx, FigNode, FigPaint } from "./types.js";
 
 const H: Record<string, string> = { MIN: "left", MAX: "right", CENTER: "center", STRETCH: "stretch", SCALE: "scale" };
@@ -26,7 +26,7 @@ const PASSTHROUGH = [
 const HANDLED = new Set([
   "id", "name", "type", "visible", "opacity", "blendMode", "isMask", "rotation", "x", "y", "width", "height",
   "parent", "children", "constraints", "fills", "strokes", "strokeWeight", "strokeAlign", "strokeTopWeight", "strokeRightWeight", "strokeBottomWeight", "strokeLeftWeight", "clipsContent", "overflowDirection",
-  "boundVariables", "layoutMode", "itemSpacing", "layoutSizingHorizontal", "layoutSizingVertical", "layoutPositioning", "primaryAxisAlignItems", "counterAxisAlignItems", "layoutWrap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
+  "boundVariables", "explicitVariableModes", "layoutMode", "itemSpacing", "layoutSizingHorizontal", "layoutSizingVertical", "layoutPositioning", "primaryAxisAlignItems", "counterAxisAlignItems", "layoutWrap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "vectorPaths",
   "fillGeometry", "characters", "fontName", "fontSize", "textStyleId", "textAutoResize", "textTruncation", "textAlignHorizontal", "textAlignVertical", "lineHeight", "letterSpacing", "componentProperties", ...PASSTHROUGH,
 ]);
 const jsonable = (v: unknown) => v !== undefined && typeof v !== "symbol" && typeof v !== "function";
@@ -73,13 +73,28 @@ function bindingsOf(n: FigNode, type: Node["type"]): Record<string, { id: string
   put("visible", one("visible"));
   put("transform/width", one("width"));
   put("transform/height", one("height"));
-  const fills = Array.isArray(n.fills) ? (n.fills as readonly FigPaint[]) : undefined;
+  const fills = paintsOf(n);
   if (type === "text") {
     put("runs/0/fill/color", paintColorBindings(fills).get(0));
     put("runs/0/size", one("fontSize"));
+    put("content", one("characters"));
+    put("lineHeight", one("lineHeight"));
+    put("letterSpacing", one("letterSpacing"));
   } else {
     for (const [i, id] of paintColorBindings(fills)) put(`fills/${i}/color`, id);
     for (const [i, id] of paintColorBindings(n.strokes)) put(`strokes/${i}/color`, id);
+    for (const [k, id] of stopColorBindings(fills)) put(`fills/${k.replace("/", "/stops/")}/color`, id);
+    for (const [k, id] of stopColorBindings(n.strokes)) put(`strokes/${k.replace("/", "/stops/")}/color`, id);
+    // stroke weights (one variable for all sides, or one per side) apply to every stroke the IR keeps
+    const nStrokes = Array.isArray(n.strokes) ? (n.strokes as readonly FigPaint[]).filter((s) => s.visible !== false).length : 0;
+    for (let i = 0; i < nStrokes; i++) {
+      put(`strokes/${i}/weight`, one("strokeWeight"));
+      for (const side of ["top", "right", "bottom", "left"]) put(`strokes/${i}/side/${side}`, one(`stroke${side[0]!.toUpperCase()}${side.slice(1)}Weight`));
+    }
+    if (n.layoutMode === "HORIZONTAL" || n.layoutMode === "VERTICAL") {
+      put("autoLayout/spacing", one("itemSpacing"));
+      ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach((f, i) => put(`autoLayout/padding/${i}`, one(f)));
+    }
   }
   return out;
 }
@@ -107,6 +122,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
   if (Object.keys(unknown).length) figma.unknown = unknown;
 
   const bound = bindingsOf(n, type);
+  const modes = n.explicitVariableModes && ctx.modeNames?.(n.explicitVariableModes);
   const parentId = n.parent && n.parent.type !== "PAGE" && n.parent.type !== "DOCUMENT" ? ctx.id(n.parent) : null;
   // Figma gives the children of a GROUP coordinates relative to the group's containing frame, not to the group, but a group becomes
   // a frame here, so make the child relative to it. The group's own rotation is dropped for the same reason: its children's
@@ -125,6 +141,7 @@ export function serializeNode(n: FigNode, ctx: Ctx): Node {
     ...(n.isMask && { mask: true }),
     ...layoutOf(n),
     ...(Object.keys(bound).length && { bindings: bound }),
+    ...(modes && { modes }),
   };
   // `figma` is filled lazily below, so build extra at the end.
   const done = (o: object): Node => ({ ...base, ...o, ...(Object.keys(figma).length && { extra: { figma } }) }) as Node;

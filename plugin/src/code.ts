@@ -1,6 +1,6 @@
 // Main thread: watches the current page, serializes changes to IR patches, hands them to the UI iframe
 // (the only place with network access). It only reports visuals; it never stores behavior.
-import { collectThemes, type FigNode, type VariablesApi } from "./serialize/index.js";
+import { collectThemes, modeNameResolver, type FigNode, type VariablesApi } from "./serialize/index.js";
 import { collector } from "./sync/debounce.js";
 import { isSecret, newSecret } from "./sync/secret.js";
 import { IdMap, type MappingStore } from "./sync/idmap.js";
@@ -50,6 +50,7 @@ async function refreshThemes(force = false): Promise<void> {
   const themes = await collectThemes(variablesApi);
   const j = JSON.stringify(themes);
   syncer.setThemes(themes);
+  syncer.setModeNames(modeNameResolver(await variablesApi.collections()));
   if (force || j !== lastThemes) { lastThemes = j; postPatches(syncer.metaPatches()); }
 }
 

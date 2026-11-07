@@ -40,9 +40,28 @@ export function paintColorBindings(paints: readonly FigPaint[] | undefined): Map
   return out;
 }
 
+/** Variable ids bound to the colour of a gradient stop, keyed `paintIndex/stopIndex` (paint index as in `paintColorBindings`; stop index = position in the gradient's stops). */
+export function stopColorBindings(paints: readonly FigPaint[] | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  let i = 0;
+  for (const p of paints ?? []) {
+    if (!toFill(p)) continue;
+    (p.gradientStops ?? []).forEach((s, j) => { const id = s.boundVariables?.color?.id; if (id) out.set(`${i}/${j}`, id); });
+    i++;
+  }
+  return out;
+}
+
+/** The paints of a node; a text with mixed fills gives those of its first character (the one run the IR keeps). */
+export function paintsOf(n: FigNode): readonly FigPaint[] | undefined {
+  if (Array.isArray(n.fills)) return n.fills as readonly FigPaint[];
+  const r = n.type === "TEXT" && n.characters ? n.getRangeFills?.(0, 1) : undefined;
+  return Array.isArray(r) ? (r as readonly FigPaint[]) : undefined;
+}
+
 export function fillsOf(n: FigNode): { fills: Fill[]; dropped: FigPaint[] } {
   const fills: Fill[] = [], dropped: FigPaint[] = [];
-  if (Array.isArray(n.fills)) for (const p of n.fills as FigPaint[]) { const f = toFill(p); f ? fills.push(f) : dropped.push(p); }
+  for (const p of paintsOf(n) ?? []) { const f = toFill(p); f ? fills.push(f) : dropped.push(p); }
   return { fills, dropped };
 }
 

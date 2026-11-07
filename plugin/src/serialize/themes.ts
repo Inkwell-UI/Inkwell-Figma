@@ -45,3 +45,17 @@ export async function collectThemes(api: VariablesApi): Promise<Theme[]> {
   }
   return out;
 }
+
+/** Names of explicit variable modes: Figma gives collection and mode ids, the IR keeps the collection and mode names that `Swf.themes` uses. Unknown ids are left out; undefined when none is left. */
+export function modeNameResolver(cols: readonly FigCollection[]): (explicit: Readonly<Record<string, string>>) => Record<string, string> | undefined {
+  const byId = new Map(cols.map((c) => [c.id, c]));
+  return (explicit) => {
+    const out: Record<string, string> = {};
+    for (const [cid, mid] of Object.entries(explicit)) {
+      const c = byId.get(cid);
+      const m = c?.modes.find((x) => x.modeId === mid);
+      if (c && m) out[c.name] = m.name;
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+}

@@ -5,7 +5,7 @@ export interface FigPaint {
   visible?: boolean;
   opacity?: number;
   color?: { r: number; g: number; b: number; a?: number };
-  gradientStops?: readonly { position: number; color: { r: number; g: number; b: number; a?: number } }[];
+  gradientStops?: readonly { position: number; color: { r: number; g: number; b: number; a?: number }; boundVariables?: { color?: { id?: string } } }[];
   gradientTransform?: readonly (readonly number[])[];
   imageHash?: string | null;
   scaleMode?: string;
@@ -20,6 +20,10 @@ export interface FigNode {
   opacity?: number;
   /** Figma variable aliases by field (`opacity`, `visible`, `width`, `height`, `fontSize`); paint colours are on the paint. */
   boundVariables?: Readonly<Record<string, { id?: string } | readonly unknown[] | undefined>>;
+  /** Variable modes set on this layer (collection id -> mode id); inherited ones are not listed. */
+  explicitVariableModes?: Readonly<Record<string, string>>;
+  /** Text only: the fills of a character range (`figma.mixed` when they differ inside it). */
+  getRangeFills?(start: number, end: number): readonly FigPaint[] | symbol;
   blendMode?: string;
   isMask?: boolean;
   rotation?: number;
@@ -75,4 +79,6 @@ export interface Ctx {
   componentOf(n: FigNode): string | undefined;
   /** Name of the text style a text node uses (async in Figma, so prefetched by the main thread). */
   styleNameOf?(n: FigNode): string | undefined;
+  /** Collection and mode names of explicit variable modes (ids in, names out); set by the main thread from the variable collections. */
+  modeNames?(explicit: Readonly<Record<string, string>>): Record<string, string> | undefined;
 }

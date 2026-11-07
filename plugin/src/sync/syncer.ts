@@ -40,6 +40,7 @@ export class Syncer {
 
   /** Sets the variable collections that ride on every SWF's metadata. */
   setThemes(themes: Theme[]): void { this.themes = themes; }
+  setModeNames(f: Ctx["modeNames"]): void { this.ctx.modeNames = f; }
 
   /** One patch with no ops and the metadata (name, stage, themes) per known SWF: sent when only the variables changed. */
   metaPatches(): PatchMessage[] {

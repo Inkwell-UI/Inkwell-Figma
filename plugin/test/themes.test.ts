@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Node, SwfMeta, Theme, isThemeBindingKey } from "@inkwell-ui/spec";
-import { collectThemes, serializeNode, type FigCollection, type FigNode, type FigVariable } from "../src/serialize/index.js";
+import { collectThemes, modeNameResolver, serializeNode, type FigCollection, type FigNode, type FigVariable } from "../src/serialize/index.js";
 import { Syncer } from "../src/sync/syncer.js";
 import { IdMap } from "../src/sync/idmap.js";
 
@@ -49,6 +49,35 @@ describe("bindings", () => {
       strokes: [bound("V2")], boundVariables: { opacity: { id: "V3" }, width: { id: "V5" } } });
     expect(n.bindings).toEqual({ opacity: { id: "V3" }, "transform/width": { id: "V5" }, "fills/1/color": { id: "V1" }, "strokes/0/color": { id: "V2" } });
     Object.keys(n.bindings).forEach((k) => expect(isThemeBindingKey(k), k).toBe(true));
+  });
+  it("gradient: the colour variable of a stop binds as fills/N/stops/M/color, N counting only drawn paints", () => {
+    const stop = (position: number, id?: string) => ({ position, color: { r: 1, g: 1, b: 1 }, ...(id && { boundVariables: { color: { id } } }) });
+    const n = ser({ id: "g", name: "g", type: "RECTANGLE", strokeWeight: 1,
+      fills: [{ type: "SOLID", visible: false, color: { r: 0, g: 0, b: 0 } }, { type: "GRADIENT_LINEAR", gradientStops: [stop(0, "V1"), stop(1)] }],
+      strokes: [{ type: "GRADIENT_RADIAL", gradientStops: [stop(0), stop(1, "V2")] }] });
+    expect(n.bindings).toEqual({ "fills/0/stops/0/color": { id: "V1" }, "strokes/0/stops/1/color": { id: "V2" } });
+    Object.keys(n.bindings).forEach((k) => expect(isThemeBindingKey(k), k).toBe(true));
+  });
+  it("number and string variables: stroke weights, auto layout, line height, letter spacing and text content", () => {
+    const fr = ser({ id: "f", name: "f", type: "FRAME", layoutMode: "VERTICAL", strokes: [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }],
+      boundVariables: { strokeWeight: { id: "W" }, strokeBottomWeight: { id: "WB" }, itemSpacing: { id: "G" }, paddingLeft: { id: "PL" } } });
+    expect(fr.bindings).toEqual({ "strokes/0/weight": { id: "W" }, "strokes/0/side/bottom": { id: "WB" }, "autoLayout/spacing": { id: "G" }, "autoLayout/padding/3": { id: "PL" } });
+    Object.keys(fr.bindings).forEach((k) => expect(isThemeBindingKey(k), k).toBe(true));
+    const t = ser({ id: "t", name: "t", type: "TEXT", characters: "hi", boundVariables: { characters: { id: "S" }, lineHeight: { id: "LH" }, letterSpacing: { id: "LS" } } });
+    expect(t.bindings).toEqual({ content: { id: "S" }, lineHeight: { id: "LH" }, letterSpacing: { id: "LS" } });
+  });
+  it("a text with mixed fills takes colour and binding of its first character", () => {
+    const mixed = Symbol("mixed");
+    const t = ser({ id: "t", name: "t", type: "TEXT", characters: "hi", fills: mixed as any, getRangeFills: () => [bound("V1")] as any });
+    expect(t.bindings).toEqual({ "runs/0/fill/color": { id: "V1" } });
+    expect(t.runs[0].fill).toMatchObject({ type: "solid" });
+  });
+  it("explicit variable modes become collection and mode names, by the resolver of the main thread", () => {
+    const names = modeNameResolver([{ id: "C1", name: "Colors", modes: [{ modeId: "m1", name: "Vanilla" }, { modeId: "m2", name: "Nordic" }], defaultModeId: "m1", variableIds: [] }]);
+    const out = serializeNode({ ...base, id: "f", name: "f", type: "FRAME", explicitVariableModes: { C1: "m2", GONE: "x" } } as FigNode, { ...ctx, modeNames: names }) as any;
+    expect(out.modes).toEqual({ Colors: "Nordic" });
+    expect((serializeNode({ ...base, id: "g", name: "g", type: "FRAME" } as FigNode, ctx) as any).modes).toBeUndefined();
+    expect(JSON.stringify(out.extra ?? {})).not.toContain("explicitVariableModes");
   });
   it("text: the fill and size bind to run 0", () => {
     const n = ser({ id: "t", name: "t", type: "TEXT", characters: "hi", fills: [bound("V1")], boundVariables: { fontSize: { id: "V3" }, visible: { id: "V6" } } });
