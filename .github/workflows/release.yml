@@ -1,0 +1,57 @@
+name: Build and package plugin
+
+# Every push and pull request: test, typecheck, build and upload the plugin as a workflow artifact. A tag v<version>
+# (equal to package.json's version) also publishes Inkwell-Figma-Plugin.zip as a release asset; unzip it and import
+# manifest.json in the Figma desktop app (Plugins > Development > Import plugin from manifest...).
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      # the plugin links ../Inkwell-Spec, so the two repos sit side by side
+      - uses: actions/checkout@v4
+        with:
+          path: Inkwell-Figma
+      - uses: actions/checkout@v4
+        with:
+          repository: Inkwell-UI/Inkwell-Spec
+          path: Inkwell-Spec
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: yarn install --frozen-lockfile && yarn build
+        working-directory: Inkwell-Spec
+      - run: yarn install --frozen-lockfile && yarn test && yarn typecheck && yarn build
+        working-directory: Inkwell-Figma
+
+      - name: Check the tag matches the plugin version
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: Inkwell-Figma
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "Tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1; fi
+
+      - name: Package the plugin
+        working-directory: Inkwell-Figma/plugin
+        run: zip -r -X ../Inkwell-Figma-Plugin.zip manifest.json dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Inkwell-Figma-Plugin
+          path: Inkwell-Figma/Inkwell-Figma-Plugin.zip
+          if-no-files-found: error
+
+      - name: Attach zip to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Inkwell-Figma/Inkwell-Figma-Plugin.zip

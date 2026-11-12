@@ -28,7 +28,7 @@ TypeScript, Figma Plugin API. Patch, IR and protocol types come from `@inkwell-u
 - **Themes are Figma variable collections** (0.4, `plugin/src/serialize/themes.ts`): the plugin sends every local collection (name, modes, a value per mode) as `Swf.themes` and, per layer, which IR property is bound to which variable (`bindings`, keys from the Spec's `themes.ts`). It never writes variables. Figma has no event for variable changes, so the plugin polls every 3 seconds. Setup for designers: `Inkwell-Editor/docs/starter-kit.md`.
 - **Cache images by hash** (`getImageByHash`); never resend unchanged images.
 - **Flag unmapped fonts at sync time.**
-- **Distribution:** from GitHub only, imported from its manifest in the Figma desktop app. The editor bundles this plugin and checks its version in the handshake; bump the protocol version in inkwell-spec when the handshake changes.
+- **Distribution:** from GitHub only, imported from its manifest in the Figma desktop app. The editor bundles this plugin and checks its version in the handshake; bump the protocol version in inkwell-spec when the handshake changes. `.github/workflows/release.yml` tests and builds on every push/PR; a tag `v<package.json version>` attaches `Inkwell-Figma-Plugin.zip` (`manifest.json` + `dist`) to a GitHub release.
 
 **Status (0.5, 2026-10-28):** plugin 0.5.0, built against spec 8 / protocol 5 (rebuild with `yarn build` after a Spec change; the editor refuses a mismatch). The portable editor zip carries `plugin/manifest.json` and `plugin/dist` in `Inkwell-Figma-Plugin/`. Not run inside Figma in 0.5 (tests only).
 
