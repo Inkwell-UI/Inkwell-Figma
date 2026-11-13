@@ -2,6 +2,8 @@
 import { isSimplePng, toBase64 } from "./sync/assets.js";
 import { describeStatus, SyncClient, type Badge, type Socket, type Status } from "./sync/client.js";
 import { newSecret } from "./sync/secret.js";
+import { parseSwf } from "./swf/parse.js";
+import { summarize, type ImportSummary } from "./swf/summary.js";
 
 const PORTS = [8787, 8788, 8789, 8790]; // must match manifest devAllowedDomains
 const PLUGIN_VERSION = "0.5.0";
@@ -13,6 +15,9 @@ let client: SyncClient | null = null;
 let last: Status = { state: "connecting" };
 let frames: { id: string; name: string }[] = [];
 let loose: { id: string; name: string }[] = [];
+let imp = ""; // progress or error text of the SWF load
+let impDone: ImportSummary | null = null; // result of the last SWF load
+let busy = false; // a SWF is being read or built
 let note = ""; // a plugin-side error (image, serializer); shown under the status until the next change
 const BADGE_LABEL: Record<Badge | "none", [string, string]> = { synced: ["ok", "Built"], compiling: ["busy", "Building"], error: ["err", "Error"], none: ["busy", "Waiting"] };
 
@@ -38,9 +43,38 @@ function render() {
     return li;
   }));
   const n = live ? loose.length : 0;
+  renderImport();
   $("note").hidden = !(n || note);
   $("note").textContent = note || `${n} ${n === 1 ? "layer sits" : "layers sit"} outside a frame and ${n === 1 ? "is" : "are"} not sent. Put ${n === 1 ? "it" : "them"} in a frame to use ${n === 1 ? "it" : "them"}.`;
-  toMain({ kind: "resize", height: Math.min(420, Math.max(70, document.getElementById("app")!.offsetHeight + 20)) });
+  fit();
+}
+const fit = () => toMain({ kind: "resize", height: Math.min(420, Math.max(70, document.getElementById("app")!.offsetHeight + 20)) });
+
+/** Result of a SWF load: one line (name, layer count), an amber row for skipped parts that opens to a list, a row for font fallbacks. Text only through textContent: names come from the file. */
+function renderImport() {
+  const box = $("imp");
+  box.hidden = !imp && !impDone;
+  if (!impDone) {
+    const kids: HTMLElement[] = imp ? [Object.assign(document.createElement("div"), { className: "dim", textContent: imp })] : [];
+    if (busy) kids.push(Object.assign(document.createElement("button"), { className: "imp-cancel", textContent: "Cancel", onclick: () => { toMain({ kind: "swfCancel" }); imp = "Cancelling…"; render(); } }));
+    box.replaceChildren(...kids);
+    return;
+  }
+  const el = (tag: string, cls: string, text = "") => Object.assign(document.createElement(tag), { className: cls, textContent: text });
+  const row = (tone: string, text: string, extra = "") => { const r = el("div", "line"); r.append(el("span", `dot ${tone}`), el("span", "", text)); if (extra) r.lastChild!.appendChild(el("span", "dim imp-more", extra)); return r; };
+  const kids: HTMLElement[] = [row("ok", impDone.title, ` · ${impDone.layers} layers${impDone.components ? `, ${impDone.components} components` : ""}`)];
+  if (impDone.skippedCount) {
+    const d = el("details", "") as HTMLDetailsElement;
+    const s = el("summary", "");
+    s.append(el("span", "dot warn"), el("span", "imp-grow", `${impDone.skippedCount} ${impDone.skippedCount === 1 ? "part" : "parts"} skipped`), el("span", "imp-chev", "›"));
+    const ul = el("ul", "");
+    ul.append(...impDone.skipped.map((t) => el("li", "", t)));
+    d.append(s, ul);
+    d.ontoggle = fit;
+    kids.push(d);
+  }
+  if (impDone.fonts) kids.push(row("warn", impDone.fonts));
+  box.replaceChildren(...kids);
 }
 
 let secret = "";
@@ -63,6 +97,51 @@ function connect() {
 }
 $("retry").onclick = connect;
 
+const stream = async (b: Uint8Array, t: TransformStream<Uint8Array, Uint8Array>) => new Uint8Array(await new Response(new Blob([b as BlobPart]).stream().pipeThrough(t)).arrayBuffer());
+const inflate = (b: Uint8Array) => stream(b, new DecompressionStream("deflate") as unknown as TransformStream<Uint8Array, Uint8Array>);
+const deflate = (b: Uint8Array) => stream(b, new CompressionStream("deflate") as unknown as TransformStream<Uint8Array, Uint8Array>);
+/** JPEG -> pixels through a canvas, so the SWF's separate alpha plane can be merged in. */
+async function decodeJpeg(jpeg: Uint8Array) {
+  const bmp = await createImageBitmap(new Blob([jpeg as BlobPart], { type: "image/jpeg" }));
+  const c = document.createElement("canvas");
+  c.width = bmp.width;
+  c.height = bmp.height;
+  const g = c.getContext("2d")!;
+  g.drawImage(bmp, 0, 0);
+  return { w: c.width, h: c.height, rgba: new Uint8Array(g.getImageData(0, 0, c.width, c.height).data.buffer.slice(0)) };
+}
+
+async function loadFile(f: File) {
+  if (busy) return;
+  impDone = null;
+  if (!/\.swf$/i.test(f.name)) { imp = `${f.name} is not a .swf file`; render(); return; }
+  busy = true;
+  $("load").disabled = true;
+  imp = `Reading ${f.name}…`;
+  render();
+  try {
+    toMain({ kind: "importSwf", model: await parseSwf(new Uint8Array(await f.arrayBuffer()), inflate, f.name.replace(/\.swf$/i, ""), { decodeJpeg, deflate }) });
+    imp = "Building…";
+    render();
+  } catch (e) { busy = false; imp = `${f.name}: ${(e as Error).message}`; $("load").disabled = false; render(); }
+}
+$("load").onclick = () => $("file").click();
+$("file").onchange = () => {
+  const input = $("file") as unknown as HTMLInputElement;
+  const f = input.files?.[0];
+  input.value = "";
+  if (f) void loadFile(f);
+};
+// dropping a .swf anywhere on the panel loads it, like the button
+document.addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("drop"); });
+document.addEventListener("dragleave", () => document.body.classList.remove("drop"));
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  document.body.classList.remove("drop");
+  const f = e.dataTransfer?.files?.[0];
+  if (f) void loadFile(f);
+});
+
 onmessage = (e) => {
   const m = e.data.pluginMessage;
   if (!m) return;
@@ -81,7 +160,17 @@ onmessage = (e) => {
     (png) => client?.send({ type: "asset", hash: m.hash, data: toBase64(png) }),
     (e) => { note = `Image ${m.hash.slice(0, 8)}: ${e}`; render(); },
   );
-  else if (m.kind === "error") { note = `Plugin error: ${m.message}`; render(); }
+  else if (m.kind === "swfProgress") { imp = `Building ${m.done} of ${m.total} layers…`; render(); }
+  else if (m.kind === "swfImported") {
+    busy = false;
+    $("load").disabled = false;
+    imp = m.cancelled ? "Import cancelled" : "";
+    impDone = m.cancelled ? null : summarize(m);
+    render();
+  }
+  else if (m.kind === "error") {
+    busy = false;
+    $("load").disabled = false; note = `Plugin error: ${m.message}`; render(); }
 };
 
 /** Figma hands back the original upload (PNG, JPEG, GIF...); the editor takes plain PNGs, so re-encode anything else through a canvas. */

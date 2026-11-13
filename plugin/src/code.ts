@@ -6,6 +6,8 @@ import { isSecret, newSecret } from "./sync/secret.js";
 import { IdMap, type MappingStore } from "./sync/idmap.js";
 import { selectNode } from "./sync/select.js";
 import { Syncer } from "./sync/syncer.js";
+import { buildSwf } from "./swf/build.js";
+import type { SwfModel } from "./swf/model.js";
 
 const NS = "inkwell";
 const store: MappingStore = {
@@ -29,6 +31,7 @@ async function prefetch(n: any): Promise<void> {
   } else if (n.type === "TEXT") styleNames.delete(n.id);
   for (const c of n.children ?? []) await prefetch(c);
 }
+let swfCancel = false;
 const post = (m: object) => figma.ui.postMessage(m);
 const postPatches = (ps: object[]) => { for (const p of ps) post({ kind: "patch", ...p }); };
 // Tell the editor which top-level frames exist and which loose layers belong to none; only when it changed.
@@ -87,7 +90,7 @@ figma.on("currentpagechange", () => enqueue(async () => {
 figma.on("selectionchange", () => post({ kind: "selection", ids: figma.currentPage.selection.map((n) => idMap.id(n)) }));
 
 figma.showUI(__html__, { width: 300, height: 110, themeColors: true });
-figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[]; nodeId?: string; focus?: boolean; height?: number }) => {
+figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?: string; hashes?: string[]; nodeId?: string; focus?: boolean; height?: number; model?: SwfModel }) => {
   if (m.kind === "ready") enqueue(async () => {
     // The secret is made once and kept in clientStorage; the editor stores only its SHA-256 after the user allowed it.
     let secret = await figma.clientStorage.getAsync("pluginSecret");
@@ -105,6 +108,16 @@ figma.ui.onmessage = (m: { kind: string; value?: string; ids?: string[]; swfId?:
     await refreshThemes(true); // a fresh connection gets the themes whether or not a layer changes
     for (const [swfId, nodeHashes] of Object.entries(syncer.hashTrees())) post({ kind: "hashTree", swfId, nodeHashes });
   });
+  // A SWF read by the UI becomes one new top-level frame; the normal change tracking then syncs it like any hand-drawn frame.
+  else if (m.kind === "importSwf" && m.model) enqueue(async () => {
+    swfCancel = false;
+    const r = await buildSwf(m.model!, figma, { progress: (done, total) => post({ kind: "swfProgress", done, total }), cancelled: () => swfCancel });
+    if (!r) { post({ kind: "swfImported", cancelled: true }); return; }
+    figma.currentPage.selection = [r.root];
+    figma.viewport.scrollAndZoomIntoView([r.root]);
+    post({ kind: "swfImported", name: r.root.name, frames: r.frames, shapes: r.shapes, texts: r.texts, components: r.components, fonts: r.fallbackFonts, warnings: r.warnings });
+  });
+  else if (m.kind === "swfCancel") swfCancel = true; // not queued: it must reach the build that is running
   else if (m.kind === "resend") enqueue(async () => { const p = await syncer.resend(m.swfId ?? "", m.ids ?? [], live); if (p) postPatches([p]); });
   else if (m.kind === "selectNode" && typeof m.nodeId === "string") void selectNode(figma as any, m.nodeId, m.focus === true)
     .then((ok) => { if (!ok) figma.notify("Inkwell: that layer is not on this page any more", { timeout: 2000 }); })

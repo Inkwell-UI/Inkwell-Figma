@@ -12,6 +12,24 @@ body{margin:0;padding:10px;font:12px/1.4 Inter,system-ui,sans-serif;background:v
 #frames li{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;border-radius:4px;background:var(--figma-color-bg-secondary,#f2f2f2)}
 #frames .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #note{margin-top:8px;padding:6px 8px;border-radius:4px;background:var(--figma-color-bg-warning-tertiary,#fff1d6)}
+#load{width:100%;height:28px;margin-top:8px;border:0;border-radius:4px;font:inherit;cursor:pointer;background:var(--figma-color-bg-brand,#0d99ff);color:var(--figma-color-text-onbrand,#fff)}
+#load:disabled{opacity:.5;cursor:default}
+body.drop{outline:2px dashed var(--figma-color-border-brand,#0d99ff);outline-offset:-4px}
+.imp-cancel{width:100%;height:28px;margin-top:6px;border:0;border-radius:4px;font:inherit;cursor:pointer;background:var(--figma-color-bg-secondary,#eee);color:inherit}
+.imp-cancel:hover{background:var(--figma-color-bg-hover,#e4e4e4)}
+.warn{background:var(--figma-color-icon-warning,#d98b00)}
+#imp{margin-top:8px;display:flex;flex-direction:column;gap:2px;word-break:break-word}
+#imp .line{min-height:24px}
+#imp .imp-more{font-weight:400}
+#imp details{border-radius:4px;background:var(--figma-color-bg-secondary,#f2f2f2)}
+#imp summary{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;cursor:pointer;list-style:none}
+#imp summary::-webkit-details-marker{display:none}
+#imp .imp-grow{flex:1;min-width:0}
+#imp .imp-chev{color:var(--figma-color-text-secondary,#666);transition:transform .15s}
+#imp details[open] .imp-chev{transform:rotate(90deg)}
+#imp ul{margin:0;padding:2px 8px 8px 24px;color:var(--figma-color-text-secondary,#666)}
+#imp li{margin:2px 0}
+@media (prefers-reduced-motion:reduce){#imp .imp-chev{transition:none}}
 #retry{width:100%;height:28px;margin-top:8px;border:0;border-radius:4px;font:inherit;cursor:pointer;background:var(--figma-color-bg-secondary,#eee);color:inherit}
 #retry:hover{background:var(--figma-color-bg-hover,#e4e4e4)}
 </style>
@@ -21,5 +39,8 @@ body{margin:0;padding:10px;font:12px/1.4 Inter,system-ui,sans-serif;background:v
   <ul id="frames" hidden></ul>
   <div id="note" hidden></div>
   <button id="retry" hidden>Ask again</button>
+  <button id="load">Load SWF&hellip;</button>
+  <input id="file" type="file" accept=".swf" hidden>
+  <div id="imp" class="small" hidden></div>
 </div>
 <script>/*SCRIPT*/</script>
